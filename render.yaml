@@ -9,6 +9,6 @@ services:
     healthCheckPath: /health
     envVars:
       - key: GITHUB_REPO
-        sync: false
+        value: bitm4ncer/UnseenStream
       - key: POOL_REFRESH_MINUTES
         value: 60

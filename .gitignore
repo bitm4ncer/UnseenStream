@@ -31,7 +31,6 @@ Thumbs.db
 *.log
 
 # Temporary files
-videos_pool.json
 temp/
 tmp/
 .claude/

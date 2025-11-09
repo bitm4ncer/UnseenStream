@@ -32,7 +32,7 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.WARNING)
 
 # Configuration
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'YOUR_USERNAME/randomTube')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'bitm4ncer/UnseenStream')
 POOL_REFRESH_MINUTES = int(os.environ.get('POOL_REFRESH_MINUTES', 60))
 GITHUB_RAW_URL = f'https://raw.githubusercontent.com/{GITHUB_REPO}/main/videos_pool.json'
 
