@@ -11,7 +11,9 @@ let preloadPlayer;
 let videoQueue = [];
 let currentIndex = 0;
 let currentVideo = null;
+let touchStartX = 0;
 let touchStartY = 0;
+let touchEndX = 0;
 let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
@@ -437,24 +439,44 @@ function previousVideo() {
 const container = document.getElementById('video-container');
 
 container.addEventListener('touchstart', (e) => {
+  touchStartX = e.changedTouches[0].screenX;
   touchStartY = e.changedTouches[0].screenY;
 }, { passive: true });
 
 container.addEventListener('touchend', (e) => {
+  touchEndX = e.changedTouches[0].screenX;
   touchEndY = e.changedTouches[0].screenY;
   handleSwipe();
 }, { passive: true });
 
 function handleSwipe() {
-  const swipeDistance = touchStartY - touchEndY;
+  const swipeDistanceX = touchStartX - touchEndX;
+  const swipeDistanceY = touchStartY - touchEndY;
   const threshold = 50;
 
-  if (swipeDistance > threshold) {
-    // Swipe up - next video
-    nextVideo();
-  } else if (swipeDistance < -threshold) {
-    // Swipe down - previous video
-    previousVideo();
+  // Determine if swipe is more horizontal or vertical
+  const absX = Math.abs(swipeDistanceX);
+  const absY = Math.abs(swipeDistanceY);
+
+  // Vertical swipe (up/down)
+  if (absY > absX && absY > threshold) {
+    if (swipeDistanceY > 0) {
+      // Swipe up - next video
+      nextVideo();
+    } else {
+      // Swipe down - previous video
+      previousVideo();
+    }
+  }
+  // Horizontal swipe (left/right)
+  else if (absX > absY && absX > threshold) {
+    if (swipeDistanceX > 0) {
+      // Swipe left - next video
+      nextVideo();
+    } else {
+      // Swipe right - previous video
+      previousVideo();
+    }
   }
 }
 
