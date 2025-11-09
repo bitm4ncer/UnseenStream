@@ -2,16 +2,14 @@
 // Configuration & State
 // ============================================
 
-const HARDCODED_API_KEY = 'AIzaSyDpqv1E4DCMml3DZarxlF3aNjjvx7KOQ1Q';
-
 // Render.com API Configuration
 // Replace with your Render.com URL after deployment
 const RENDER_API_URL = localStorage.getItem('render_api_url') || '';
 let useRenderAPI = RENDER_API_URL !== '';
 
-// Always use the hardcoded API key and update localStorage
-localStorage.setItem('youtube_api_key', HARDCODED_API_KEY);
-let API_KEY = HARDCODED_API_KEY;
+// YouTube API Key - User must provide their own key
+// Get from localStorage or prompt user to enter
+let API_KEY = localStorage.getItem('youtube_api_key') || '';
 let player;
 let preloadPlayer; // Player for preloading next video
 let videoQueue = [];
@@ -33,6 +31,60 @@ const DEFAULT_PREFERENCES = {
 };
 
 let preferences = JSON.parse(localStorage.getItem('preferences')) || DEFAULT_PREFERENCES;
+
+// ============================================
+// API Key Management
+// ============================================
+
+function checkAndPromptForAPIKey() {
+  if (!API_KEY && !useRenderAPI) {
+    const apiKeyModal = `
+      <div id="api-key-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+        <div style="background: #1a1a1a; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%;">
+          <h2 style="color: #fff; margin-top: 0;">YouTube API Key Required</h2>
+          <p style="color: #ccc;">To discover fresh videos, you need a YouTube API key. It's free!</p>
+          <ol style="color: #ccc; text-align: left; line-height: 1.6;">
+            <li>Go to <a href="https://console.cloud.google.com/" target="_blank" style="color: #4a9eff;">Google Cloud Console</a></li>
+            <li>Create a project and enable YouTube Data API v3</li>
+            <li>Create credentials → API Key</li>
+            <li>Restrict by HTTP referrer (add your domain)</li>
+            <li>Paste your key below</li>
+          </ol>
+          <input type="text" id="api-key-input" placeholder="Enter your YouTube API key" style="width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #444; background: #2a2a2a; color: #fff; box-sizing: border-box;">
+          <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button onclick="saveAPIKey()" style="flex: 1; padding: 10px; background: #4a9eff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">Save & Start</button>
+            <button onclick="skipAPIKey()" style="flex: 1; padding: 10px; background: #444; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">Skip (Limited Videos)</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', apiKeyModal);
+  }
+}
+
+function saveAPIKey() {
+  const input = document.getElementById('api-key-input');
+  const key = input.value.trim();
+  if (key) {
+    localStorage.setItem('youtube_api_key', key);
+    API_KEY = key;
+    document.getElementById('api-key-modal').remove();
+    console.log('API key saved successfully');
+    // Reload to start fetching videos
+    location.reload();
+  } else {
+    alert('Please enter a valid API key');
+  }
+}
+
+function skipAPIKey() {
+  document.getElementById('api-key-modal').remove();
+  console.log('API key skipped - using pre-fetched videos only');
+}
+
+// Make functions globally accessible
+window.saveAPIKey = saveAPIKey;
+window.skipAPIKey = skipAPIKey;
 
 // ============================================
 // Load Pre-fetched Videos
@@ -748,6 +800,9 @@ document.querySelectorAll('.modal').forEach(modal => {
 // ============================================
 
 window.addEventListener('load', async () => {
+  // Check if user needs to provide API key
+  checkAndPromptForAPIKey();
+
   // Load pre-fetched videos first
   const hasVideos = await loadPrefetchedVideos();
 
@@ -771,7 +826,11 @@ window.addEventListener('load', async () => {
       }
     }
   } else {
-    // No pre-fetched videos, try API
-    document.getElementById('loading').textContent = 'No videos available. Please add videos.json or configure API key.';
+    // No pre-fetched videos, check for API key
+    if (!API_KEY && !useRenderAPI) {
+      document.getElementById('loading').textContent = 'Please provide a YouTube API key to discover videos';
+    } else {
+      document.getElementById('loading').textContent = 'No videos available. Please add videos.json or configure API key.';
+    }
   }
 });
