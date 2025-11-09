@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 UnseenStream Video Discovery Script v0.1
-Discovers ultra-fresh YouTube videos (uploaded within last hour) with 0-1 views.
+Discovers ultra-fresh YouTube videos (uploaded within last hour) with 0-100 views.
 Runs hourly via GitHub Actions.
 Uses efficient batching to minimize API quota usage.
+Performs 6 searches per run for geographic and language diversity.
 """
 
 import os
@@ -110,7 +111,7 @@ def search_recent_videos(youtube):
 def batch_check_view_counts(youtube, video_ids):
     """
     Check view counts for multiple videos in a single API call.
-    Filters for videos with 0-1 views only.
+    Filters for videos with 0-100 views only.
     """
     if not video_ids:
         return []
@@ -130,7 +131,7 @@ def batch_check_view_counts(youtube, video_ids):
             video_id = item['id']
             view_count = int(item['statistics'].get('viewCount', 0))
 
-            # Filter for 0-1 views
+            # Filter for 0-100 views
             if view_count <= MAX_VIEW_COUNT:
                 video_data = {
                     'id': video_id,
@@ -144,7 +145,7 @@ def batch_check_view_counts(youtube, video_ids):
                 low_view_videos.append(video_data)
                 print(f"  ✓ {video_data['title'][:50]} ({view_count} views)")
 
-        print(f"✓ Found {len(low_view_videos)} videos with 0-1 views")
+        print(f"✓ Found {len(low_view_videos)} videos with 0-{MAX_VIEW_COUNT} views")
         return low_view_videos
 
     except HttpError as e:
@@ -254,17 +255,34 @@ def main():
     existing_videos = load_pool()
     print(f"\nLoaded {len(existing_videos)} existing videos from pool")
 
-    # Search for new videos
-    print(f"\nSearching for videos uploaded in last {SEARCH_WINDOW_HOURS} hour(s)...")
-    new_video_ids = search_recent_videos(youtube)
-
-    # Filter existing IDs
+    # Search for new videos (perform multiple searches for diversity)
+    print(f"\nPerforming {SEARCHES_PER_RUN} searches for videos uploaded in last {SEARCH_WINDOW_HOURS} hour(s)...")
+    all_new_video_ids = []
     existing_ids = {v['id'] for v in existing_videos}
-    fresh_video_ids = [vid for vid in new_video_ids if vid not in existing_ids]
 
-    if fresh_video_ids:
-        print(f"Found {len(fresh_video_ids)} new videos (not in pool)")
-        new_videos = batch_check_view_counts(youtube, fresh_video_ids)
+    for search_num in range(1, SEARCHES_PER_RUN + 1):
+        print(f"\n--- Search {search_num}/{SEARCHES_PER_RUN} ---")
+        video_ids = search_recent_videos(youtube)
+
+        # Filter out duplicates and already-existing IDs
+        for vid in video_ids:
+            if vid not in existing_ids and vid not in all_new_video_ids:
+                all_new_video_ids.append(vid)
+
+    print(f"\n✓ Total unique new videos found: {len(all_new_video_ids)}")
+
+    # Check view counts for all new videos
+    if all_new_video_ids:
+        print(f"\nChecking view counts for {len(all_new_video_ids)} new videos...")
+        new_videos = []
+
+        # Process in batches of VIEW_CHECK_BATCH_SIZE
+        for i in range(0, len(all_new_video_ids), VIEW_CHECK_BATCH_SIZE):
+            batch = all_new_video_ids[i:i + VIEW_CHECK_BATCH_SIZE]
+            batch_videos = batch_check_view_counts(youtube, batch)
+            new_videos.extend(batch_videos)
+
+        print(f"✓ Total new videos with 0-{MAX_VIEW_COUNT} views: {len(new_videos)}")
     else:
         print("No new videos found")
         new_videos = []

@@ -108,14 +108,14 @@ UnseenStream/
 ├── index.html                   # Main application
 ├── script.js                    # Frontend logic with cold-start detection
 ├── styles.css                   # Styling
-├── videos_pool.json             # Fresh 0-1 view videos pool (for Render API)
+├── videos_pool.json             # Fresh 0-100 view videos pool (for Render API)
 │
 ├── api/                         # Render.com backend (required)
 │   ├── api_server.py            # Flask API server with advanced logging
 │   └── requirements.txt         # Python dependencies
 │
 ├── scripts/                     # GitHub Actions automation
-│   ├── video_discovery.py       # Discovers 0-1 view videos
+│   ├── video_discovery.py       # Discovers 0-100 view videos (6 searches/hour)
 │   └── requirements.txt         # Python dependencies
 │
 ├── .github/workflows/
