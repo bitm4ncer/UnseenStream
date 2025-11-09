@@ -42,6 +42,7 @@ video_pool = []
 pool_last_updated = None
 videos_served = 0
 server_started = datetime.utcnow()
+rotator_started = False
 
 
 def fetch_video_pool():
@@ -98,9 +99,12 @@ def video_rotator():
                 videos_served += 1
                 rotation_count += 1
 
-                # Log every 100 rotations
+                # Log each rotation with video details
+                logger.info(f"[Rotation #{rotation_count}] Selected: '{current_video.get('title', 'Unknown')[:60]}' (ID: {current_video.get('id', 'N/A')}, Views: {current_video.get('viewCount', 'N/A')})")
+
+                # Summary log every 100 rotations
                 if rotation_count % 100 == 0:
-                    logger.info(f"Rotated {rotation_count} videos | Pool size: {len(video_pool)} | Total served: {videos_served}")
+                    logger.info(f"=== Summary: {rotation_count} rotations | Pool size: {len(video_pool)} | Total served: {videos_served} ===")
             else:
                 logger.warning("Video pool is empty")
                 current_video = {
@@ -114,6 +118,34 @@ def video_rotator():
         except Exception as e:
             logger.error(f"Error in video rotator: {e}", exc_info=True)
             time.sleep(1)
+
+
+def ensure_rotator_started():
+    """Ensure video rotator is running (for Gunicorn compatibility)"""
+    global rotator_started
+    if not rotator_started:
+        logger.info("="*60)
+        logger.info("UnseenStream API Server v0.1")
+        logger.info(f"GitHub Repo: {GITHUB_REPO}")
+        logger.info(f"Pool refresh interval: {POOL_REFRESH_MINUTES} minutes")
+        logger.info("="*60)
+
+        # Initial pool fetch
+        logger.info("Initializing video pool...")
+        fetch_video_pool()
+
+        # Start video rotator in background thread
+        rotator_thread = threading.Thread(target=video_rotator, daemon=True)
+        rotator_thread.start()
+        logger.info("Video rotator started (1 video/second)")
+
+        rotator_started = True
+
+
+@app.before_request
+def before_request():
+    """Initialize rotator on first request (Gunicorn compatibility)"""
+    ensure_rotator_started()
 
 
 @app.route('/health')
