@@ -17,7 +17,7 @@ UnseenStream is a TikTok-style interface for discovering ultra-fresh YouTube vid
 **Frontend (Static Web App)**
 - Single-page application: `index.html`, `script.js`, `styles.css`
 - YouTube IFrame API for video playback
-- LocalStorage for API keys, preferences, and saved videos
+- LocalStorage for preferences and saved videos
 - No build process required - pure HTML/CSS/JS
 
 **Backend API (Optional - Render.com)**
@@ -29,7 +29,6 @@ UnseenStream is a TikTok-style interface for discovering ultra-fresh YouTube vid
 
 **Automation Layer (GitHub Actions)**
 - Hourly video discovery: `scripts/video_discovery.py`
-- Legacy camera pattern scraper: `scraper.py`
 - Outputs: `videos_pool.json` (0-1 view videos), `videos.json` (fallback)
 - Auto-commits updated video data
 
@@ -73,9 +72,6 @@ export YOUTUBE_API_KEY="your_api_key_here"
 
 # Run discovery script
 python scripts/video_discovery.py
-
-# Run legacy scraper (camera patterns)
-python scraper.py
 ```
 
 ### Testing Render API Locally
@@ -125,7 +121,6 @@ python scripts/video_discovery.py
 │   ├── video_discovery.py  # Discovers 0-1 view videos (GitHub Actions)
 │   └── requirements.txt    # google-api-python-client
 │
-├── scraper.py              # Legacy scraper (camera patterns like DSC_1234)
 ├── render.yaml             # Render.com deployment config
 └── .github/workflows/
     └── scrape-videos.yml   # Hourly automation (0 * * * *)
@@ -142,12 +137,6 @@ python scripts/video_discovery.py
 4. Filter for 0-1 views only
 5. Update existing pool: remove old/popular videos, add fresh ones
 6. Safety: Never drop below 1,000 videos
-
-**Camera Pattern Discovery (`scraper.py`)**
-1. Generate random queries: DSC_1234, IMG_5678, MOV_0042, etc.
-2. Search YouTube for recently uploaded videos
-3. Filter by view count (0-10,000 configurable)
-4. Maintain pool of ~1,000 unique videos
 
 ### Frontend State Management
 
@@ -168,13 +157,6 @@ prefetchedVideos   // Loaded from videos.json
 The frontend polls `/current-video` endpoint continuously. The backend's background thread ensures a new random video is available every second without client-side rotation logic.
 
 ## Common Tasks
-
-### Adding New Video Discovery Patterns
-
-Edit `scraper.py` line 20:
-```python
-PATTERNS = ['DSC', 'IMG', 'MOV', 'VID', 'GOPR', 'DJI', 'PICT']  # Add more
-```
 
 ### Changing Pool Size Limits
 

@@ -115,8 +115,6 @@ UnseenStream/
 │   ├── video_discovery.py       # Discovers 0-1 view videos
 │   └── requirements.txt         # Python dependencies
 │
-├── scraper.py                   # Legacy scraper (camera patterns)
-│
 ├── .github/workflows/
 │   └── scrape-videos.yml        # Hourly automation workflow
 │
