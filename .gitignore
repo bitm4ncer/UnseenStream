@@ -34,3 +34,4 @@ Thumbs.db
 videos_pool.json
 temp/
 tmp/
+.claude/
