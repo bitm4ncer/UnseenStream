@@ -214,7 +214,7 @@ function onYouTubeIframeAPIReady() {
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: 0,
+      autoplay: 1,
       controls: 1,
       modestbranding: 1,
       rel: 0,
@@ -246,6 +246,9 @@ function onPlayerReady(event) {
   if (videoQueue.length > 0) {
     loadVideo(videoQueue[0]);
     document.getElementById('loading').classList.add('hidden');
+  } else {
+    // Fetch first video if queue is empty
+    fetchVideos();
   }
 }
 
@@ -514,6 +517,14 @@ function toggleAutoplay() {
   localStorage.setItem('autoplayEnabled', isAutoplayEnabled);
 
   console.log('Autoplay:', isAutoplayEnabled ? 'enabled' : 'disabled');
+
+  // If autoplay was just enabled and video has ended, start next video
+  if (isAutoplayEnabled && player && player.getPlayerState) {
+    const state = player.getPlayerState();
+    if (state === YT.PlayerState.ENDED) {
+      nextVideo();
+    }
+  }
 }
 
 // Load autoplay preference on startup
@@ -521,7 +532,10 @@ function loadAutoplayPreference() {
   const savedPreference = localStorage.getItem('autoplayEnabled');
   if (savedPreference === 'true') {
     isAutoplayEnabled = true;
-    document.getElementById('autoplay-btn')?.classList.add('active');
+    const autoplayBtn = document.getElementById('autoplay-btn');
+    if (autoplayBtn) {
+      autoplayBtn.classList.add('active');
+    }
   }
 }
 
@@ -638,12 +652,44 @@ document.querySelectorAll('.modal').forEach(modal => {
 });
 
 // ============================================
+// Welcome Modal (First Visit)
+// ============================================
+
+function showWelcome() {
+  document.getElementById('welcome-modal').classList.add('show');
+}
+
+function closeWelcome() {
+  document.getElementById('welcome-modal').classList.remove('show');
+  localStorage.setItem('hasVisited', 'true');
+
+  // Start playing the first video if it's loaded
+  if (player && player.playVideo && currentVideo) {
+    player.playVideo();
+  }
+}
+
+// Check if first visit
+function checkFirstVisit() {
+  const hasVisited = localStorage.getItem('hasVisited');
+  if (!hasVisited) {
+    // Wait a moment for the page to settle, then show welcome
+    setTimeout(() => {
+      showWelcome();
+    }, 500);
+  }
+}
+
+// ============================================
 // Initialization
 // ============================================
 
 window.addEventListener('load', async () => {
   const loadingEl = document.getElementById('loading');
   loadingEl.classList.remove('hidden');
+
+  // Check for first visit
+  checkFirstVisit();
 
   if (!RENDER_API_URL) {
     loadingEl.textContent = 'No API URL configured. Please set Render API URL in settings.';

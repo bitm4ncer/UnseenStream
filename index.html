@@ -18,19 +18,20 @@
 
   <!-- Controls (below video) -->
   <div id="controls">
+    <!-- Left: Video Info -->
     <div id="video-info">
       <div id="video-title">Loading...</div>
       <div id="video-stats"></div>
     </div>
 
-    <!-- Navigation Buttons -->
+    <!-- Center: Navigation Buttons -->
     <div class="nav-buttons">
       <button class="nav-btn" id="prev-btn" onclick="previousVideo()" title="Previous video (← or ↓)">Prev</button>
-      <button class="nav-btn" id="play-pause-btn" onclick="togglePlayPause()" title="Play/Pause (Space)">
-        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
+        <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
-        <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+        <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="4" width="4" height="16"></rect>
           <rect x="14" y="4" width="4" height="16"></rect>
         </svg>
@@ -38,29 +39,39 @@
       <button class="nav-btn" id="next-btn" onclick="nextVideo()" title="Next video (→ or ↑)">Next</button>
     </div>
 
-    <!-- Action Buttons -->
+    <!-- Right: Action Buttons -->
     <div class="action-buttons">
       <button id="heart-btn" onclick="toggleSave()" title="Save video">♡</button>
-      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
-        <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-        <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-          <rect x="6" y="4" width="4" height="16"></rect>
-          <rect x="14" y="4" width="4" height="16"></rect>
-        </svg>
-      </button>
       <button id="library-btn" onclick="openSaved()" title="Saved videos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
       </button>
-      <button id="fade-btn" onclick="toggleControls()" title="Hide controls">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 15l-6-6-6 6"/>
-        </svg>
-      </button>
+    </div>
+  </div>
+
+  <!-- Fade Controls Button (fixed position) -->
+  <button id="fade-btn" onclick="toggleControls()" title="Hide controls">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M6 9l6 6 6-6"/>
+    </svg>
+  </button>
+
+  <!-- Welcome Info Modal -->
+  <div id="welcome-modal" class="modal">
+    <div class="modal-content welcome-content">
+      <div class="modal-header">
+        <h2>Unseen Stream</h2>
+        <button class="close-btn" onclick="closeWelcome()">×</button>
+      </div>
+      <div class="welcome-body">
+        <p class="welcome-stat">Every second, over 8 hours of video are uploaded to YouTube.</p>
+        <p class="welcome-text">Most of these videos will never be seen. They're personal moments, spontaneous captures, unintended uploads—raw glimpses into different realities around the world.</p>
+        <p class="welcome-text">Instead of algorithm-driven content designed to perform, Unseen Stream shows you the unfiltered internet: videos with zero to few views, uploaded by real people living their lives.</p>
+        <p class="welcome-text">Swipe up/down or use arrow keys to explore authentic moments from across the globe.</p>
+        <button class="welcome-btn" onclick="closeWelcome()">Dive in</button>
+      </div>
     </div>
   </div>
 
