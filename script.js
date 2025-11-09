@@ -129,6 +129,13 @@ async function fetchFromRenderAPI() {
       signal: AbortSignal.timeout(5000) // 5 second timeout
     });
 
+    if (response.status === 503) {
+      // Service not ready (pool loading)
+      const data = await response.json();
+      console.warn('Server pool loading:', data.message);
+      return { status: 503, message: data.message };
+    }
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -268,26 +275,37 @@ async function fetchVideos() {
   }
 
   isLoading = true;
-  document.getElementById('loading').classList.remove('hidden');
-  document.getElementById('loading').textContent = 'Loading videos...';
+  const loadingEl = document.getElementById('loading');
+  loadingEl.classList.remove('hidden');
+  loadingEl.textContent = 'Loading videos...';
 
   try {
     const renderVideo = await fetchFromRenderAPI();
+
+    // Handle 503 (pool loading)
+    if (renderVideo && renderVideo.status === 503) {
+      loadingEl.textContent = 'Server is loading video pool... Retrying in 3 seconds';
+      loadingEl.style.color = 'rgba(255, 255, 255, 0.7)';
+      isLoading = false;
+
+      // Retry after 3 seconds
+      setTimeout(() => fetchVideos(), 3000);
+      return;
+    }
+
     if (renderVideo) {
       videoQueue.push(renderVideo);
       if (!currentVideo && videoQueue.length > 0) {
         loadVideo(videoQueue[0]);
       }
-      document.getElementById('loading').classList.add('hidden');
+      loadingEl.classList.add('hidden');
     } else {
       // API failed, show error
-      const loadingEl = document.getElementById('loading');
       loadingEl.textContent = 'Failed to fetch video from server. Please try again.';
       loadingEl.style.color = '#ff4444';
     }
   } catch (error) {
     console.error('Error fetching videos:', error);
-    const loadingEl = document.getElementById('loading');
     loadingEl.textContent = `Error: ${error.message}`;
     loadingEl.style.color = '#ff4444';
   }
