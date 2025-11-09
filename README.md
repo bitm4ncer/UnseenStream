@@ -10,7 +10,7 @@ Live Demo: https://bitm4ncer.github.io/UnseenStream/
 UnseenStream streams videos with 0-100 views from a Flask backend API hosted on Render.com,
 with videos rotated every 1 second for truly random, never-before-seen content.
 
-The backend maintains a pool of up to 50,000 ultra-fresh videos (uploaded within the last hour),
+The backend maintains a pool of up to 50,000 ultra-fresh videos (uploaded within the last 6 hours),
 automatically refreshed hourly via GitHub Actions.
 
 ## Quick Start
@@ -56,7 +56,7 @@ HOW IT WORKS
 
 GITHUB ACTIONS AUTOMATION
 - Runs every hour (distributed quota usage)
-- Discovers ultra-fresh videos (uploaded in last hour)
+- Discovers ultra-fresh videos (uploaded in last 6 hours)
 - Maintains pool of up to 50,000 videos with 0-100 views
 - Removes videos when views exceed 100
 - Uses approximately 6,400 quota units/day (64% of free quota)
@@ -85,7 +85,7 @@ ARCHITECTURE
 
 VIDEO DISCOVERY & SELECTION
 - Random search queries with geographic and language diversity
-- Filters for videos uploaded within last hour
+- Filters for videos uploaded within last 6 hours
 - Only serves videos with 0-100 views
 - Weighted random selection algorithm:
   * 0 views = weight 101 (highest priority)

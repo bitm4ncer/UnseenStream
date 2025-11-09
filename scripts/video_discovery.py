@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 UnseenStream Video Discovery Script v0.1
-Discovers ultra-fresh YouTube videos (uploaded within last hour) with 0-100 views.
+Discovers ultra-fresh YouTube videos (uploaded within last 6 hours) with 0-100 views.
 Runs hourly via GitHub Actions.
 Uses efficient batching to minimize API quota usage.
 Performs 6 searches per run for geographic and language diversity.
@@ -21,7 +21,7 @@ MAX_POOL_SIZE = 50000
 MIN_POOL_SIZE = 1000  # Never delete videos if pool is below this
 
 # Search Configuration
-SEARCH_WINDOW_HOURS = 1  # Look for videos uploaded in last 1 hour
+SEARCH_WINDOW_HOURS = 6  # Look for videos uploaded in last 6 hours
 MAX_RESULTS_PER_SEARCH = 50
 SEARCHES_PER_RUN = 6  # Six searches per hour = 144 searches/day
 
