@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-11-09T01:38:17.773767Z",
+  "last_updated": "2025-11-09T03:18:52.763664Z",
   "total_videos": 2,
   "videos": [
     {
@@ -16,13 +16,13 @@
       "title": "5171 #243920542",
       "channelTitle": "Gudrun Quigley",
       "thumbnail": "https://i.ytimg.com/vi/7sZLd48D7Go/mqdefault.jpg",
-      "viewCount": 0,
+      "viewCount": 1,
       "publishedAt": "2025-10-21T11:06:42Z",
       "discoveredAt": "2025-11-08T19:58:44.083136Z"
     }
   ],
   "stats": {
-    "new_videos_added": 2,
+    "new_videos_added": 0,
     "videos_removed": 0,
     "total_in_pool": 2
   }
