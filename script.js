@@ -3,7 +3,7 @@
 // ============================================
 
 // Render.com API Configuration
-const RENDER_API_URL = localStorage.getItem('render_api_url') || '';
+const RENDER_API_URL = localStorage.getItem('render_api_url') || 'https://unseenstream.onrender.com';
 
 // State
 let player;
