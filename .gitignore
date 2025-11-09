@@ -35,3 +35,5 @@ videos_pool.json
 temp/
 tmp/
 .claude/
+*.pyc
+__pycache__/

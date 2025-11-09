@@ -31,12 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Geographic and language diversity in search queries
 
 ### Files Added
-- `api/api_server.py` - Backend API server
+- `api/api_server.py` - Backend API server with advanced logging
 - `api/requirements.txt` - API dependencies
 - `scripts/video_discovery.py` - Fresh video scraper
 - `scripts/requirements.txt` - Scraper dependencies
 - `render.yaml` - Render.com configuration
-- `.env.example` - Environment variables template
 - `docs/RENDER_DEPLOYMENT.md` - Deployment guide
 - `VERSION` - Version tracking
 - `CHANGELOG.md` - This file
