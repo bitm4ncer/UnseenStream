@@ -4,7 +4,6 @@
 
 // Render.com API Configuration
 const RENDER_API_URL = localStorage.getItem('render_api_url') || '';
-let useRenderAPI = RENDER_API_URL !== '';
 
 // State
 let player;
@@ -15,9 +14,8 @@ let currentVideo = null;
 let touchStartY = 0;
 let touchEndY = 0;
 let isLoading = false;
-let prefetchedVideos = [];
-let prefetchedIndex = 0;
 let isAutoplayEnabled = false;
+let isColdStarting = false;
 
 const DEFAULT_PREFERENCES = {
   maxViews: 1000,
@@ -29,48 +27,86 @@ const DEFAULT_PREFERENCES = {
 let preferences = JSON.parse(localStorage.getItem('preferences')) || DEFAULT_PREFERENCES;
 
 // ============================================
-// Load Pre-fetched Videos
+// Cold Start Detection & UI
 // ============================================
 
-async function loadPrefetchedVideos() {
+async function checkServerStatus() {
+  if (!RENDER_API_URL) {
+    return { status: 'no_url', message: 'No API URL configured' };
+  }
+
   try {
-    const response = await fetch('videos.json');
-    const data = await response.json();
-    prefetchedVideos = data.videos || [];
+    console.log('Checking server status...');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    // Shuffle for randomness
-    prefetchedVideos.sort(() => Math.random() - 0.5);
+    const response = await fetch(`${RENDER_API_URL}/health`, {
+      method: 'GET',
+      signal: controller.signal
+    });
 
-    console.log(`Loaded ${prefetchedVideos.length} pre-fetched videos`);
-    console.log(`Last updated: ${data.last_updated}`);
+    clearTimeout(timeout);
 
-    return prefetchedVideos.length > 0;
+    if (response.ok) {
+      return { status: 'ready', message: 'Server is ready' };
+    } else {
+      return { status: 'cold_start', message: 'Server is waking up' };
+    }
   } catch (error) {
-    console.error('Error loading pre-fetched videos:', error);
-    return false;
+    if (error.name === 'AbortError') {
+      return { status: 'cold_start', message: 'Server is starting (timeout)' };
+    }
+    return { status: 'cold_start', message: 'Server needs to wake up' };
   }
 }
 
-function getNextPrefetchedVideo() {
-  if (prefetchedVideos.length === 0) return null;
+function showColdStartUI(remainingSeconds) {
+  const loadingEl = document.getElementById('loading');
+  loadingEl.classList.remove('hidden');
+  loadingEl.innerHTML = `
+    <div style="text-align: center;">
+      <div style="font-size: 1.2em; margin-bottom: 10px;">Server is waking up...</div>
+      <div style="font-size: 2em; font-weight: bold; margin: 20px 0;">${remainingSeconds}s</div>
+      <div style="width: 80%; max-width: 300px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: 0 auto; overflow: hidden;">
+        <div id="progress-bar" style="height: 100%; background: #4CAF50; border-radius: 2px; transition: width 1s linear;"></div>
+      </div>
+    </div>
+  `;
+}
 
-  const video = prefetchedVideos[prefetchedIndex % prefetchedVideos.length];
-  prefetchedIndex++;
+async function waitForColdStart() {
+  const MAX_WAIT_TIME = 90; // 90 seconds max wait
+  const CHECK_INTERVAL = 2; // Check every 2 seconds
+  let elapsed = 0;
 
-  // Convert to format expected by loadVideo
-  return {
-    id: { videoId: video.id },
-    snippet: {
-      title: video.title,
-      channelTitle: video.channelTitle,
-      thumbnails: {
-        medium: { url: video.thumbnail }
-      }
-    },
-    statistics: {
-      viewCount: video.viewCount.toString()
+  isColdStarting = true;
+
+  while (elapsed < MAX_WAIT_TIME) {
+    const remaining = MAX_WAIT_TIME - elapsed;
+    showColdStartUI(remaining);
+
+    // Update progress bar
+    const progressBar = document.getElementById('progress-bar');
+    if (progressBar) {
+      const progress = (elapsed / MAX_WAIT_TIME) * 100;
+      progressBar.style.width = `${progress}%`;
     }
-  };
+
+    // Check server status
+    const status = await checkServerStatus();
+    if (status.status === 'ready') {
+      console.log('Server is ready!');
+      isColdStarting = false;
+      return true;
+    }
+
+    // Wait before next check
+    await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL * 1000));
+    elapsed += CHECK_INTERVAL;
+  }
+
+  isColdStarting = false;
+  return false; // Timeout
 }
 
 // ============================================
@@ -221,42 +257,32 @@ function preloadNextVideo() {
 // ============================================
 
 async function fetchVideos() {
-  if (isLoading) return;
+  if (isLoading || isColdStarting) return;
+
+  if (!RENDER_API_URL) {
+    const loadingEl = document.getElementById('loading');
+    loadingEl.classList.remove('hidden');
+    loadingEl.textContent = 'No API URL configured. Please set Render API URL in settings.';
+    loadingEl.style.color = '#ff4444';
+    return;
+  }
 
   isLoading = true;
   document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('loading').textContent = 'Loading videos...';
 
   try {
-    // Try Render API first (0-1 view videos, rotates every second)
-    if (useRenderAPI && RENDER_API_URL) {
-      const renderVideo = await fetchFromRenderAPI();
-      if (renderVideo) {
-        videoQueue.push(renderVideo);
-        if (!currentVideo && videoQueue.length > 0) {
-          loadVideo(videoQueue[0]);
-        }
-        isLoading = false;
-        document.getElementById('loading').classList.add('hidden');
-        return;
-      }
-      console.log('Render API failed, falling back to prefetched videos');
-    }
-
-    // Fallback to prefetched videos
-    if (prefetchedVideos.length > 0) {
-      for (let i = 0; i < 5; i++) {
-        const video = getNextPrefetchedVideo();
-        if (video) videoQueue.push(video);
-      }
-
+    const renderVideo = await fetchFromRenderAPI();
+    if (renderVideo) {
+      videoQueue.push(renderVideo);
       if (!currentVideo && videoQueue.length > 0) {
         loadVideo(videoQueue[0]);
       }
-
       document.getElementById('loading').classList.add('hidden');
     } else {
+      // API failed, show error
       const loadingEl = document.getElementById('loading');
-      loadingEl.textContent = 'No videos available. Please check configuration.';
+      loadingEl.textContent = 'Failed to fetch video from server. Please try again.';
       loadingEl.style.color = '#ff4444';
     }
   } catch (error) {
@@ -580,27 +606,39 @@ document.querySelectorAll('.modal').forEach(modal => {
 // ============================================
 
 window.addEventListener('load', async () => {
-  // Load pre-fetched videos
-  const hasVideos = await loadPrefetchedVideos();
+  const loadingEl = document.getElementById('loading');
+  loadingEl.classList.remove('hidden');
 
-  if (hasVideos) {
-    document.getElementById('loading').classList.remove('hidden');
-    document.getElementById('loading').textContent = 'Loading videos...';
+  if (!RENDER_API_URL) {
+    loadingEl.textContent = 'No API URL configured. Please set Render API URL in settings.';
+    loadingEl.style.color = '#ff4444';
+    return;
+  }
 
-    // Load initial videos from prefetched
-    for (let i = 0; i < 5 && i < prefetchedVideos.length; i++) {
-      const video = getNextPrefetchedVideo();
-      if (video) videoQueue.push(video);
-    }
+  loadingEl.textContent = 'Checking server status...';
 
-    // Wait for player to be ready
-    if (player && player.loadVideoById) {
-      if (videoQueue.length > 0) {
-        loadVideo(videoQueue[0]);
-        document.getElementById('loading').classList.add('hidden');
-      }
+  // Check if server is ready or needs cold start
+  const status = await checkServerStatus();
+
+  if (status.status === 'ready') {
+    // Server is ready, fetch videos immediately
+    console.log('Server is ready, fetching videos...');
+    loadingEl.textContent = 'Loading videos...';
+    await fetchVideos();
+  } else if (status.status === 'cold_start') {
+    // Server needs to wake up
+    console.log('Server is cold starting...');
+    const success = await waitForColdStart();
+
+    if (success) {
+      loadingEl.textContent = 'Loading videos...';
+      await fetchVideos();
+    } else {
+      loadingEl.textContent = 'Server startup timeout. Please refresh the page.';
+      loadingEl.style.color = '#ff4444';
     }
   } else {
-    document.getElementById('loading').textContent = 'No videos available. Please check configuration.';
+    loadingEl.textContent = status.message;
+    loadingEl.style.color = '#ff4444';
   }
 });

@@ -7,55 +7,49 @@ Live Demo: https://bitm4ncer.github.io/UnseenStream/
 
 ## Overview
 
-UnseenStream operates in two modes:
+UnseenStream streams videos with 0-1 views from a Flask backend API hosted on Render.com,
+with videos rotated every 1 second for truly random, never-before-seen content.
 
-1. Render API Mode (optional) - Serves videos with 0-1 views from a Flask backend,
-   rotated every 1 second for truly random, never-before-seen content
-
-2. Pre-fetched Mode (default) - Uses locally stored videos updated hourly via GitHub Actions,
-   works without any backend setup
+The backend maintains a pool of 10,000 ultra-fresh videos (uploaded within the last hour),
+automatically refreshed hourly via GitHub Actions.
 
 ## Quick Start
 
-### For Users (No Setup Required)
-
-1. Open index.html in your browser
-2. Start swiping through random videos
-
-### For Developers (GitHub Actions Setup)
+### Deployment (Required)
 
 1. Fork this repository
 2. Get a YouTube API Key from Google Cloud Console
 3. Add API key as GitHub Secret: YOUTUBE_API_KEY
-4. GitHub Actions will scrape videos hourly
-5. Deploy to GitHub Pages or any static host
-
-### For Power Users (Render.com Backend)
-
-1. Complete "For Developers" setup above
-2. Sign up at Render.com (free tier)
-3. Deploy API server (5 minutes)
-4. Configure keepalive pings for 24/7 operation
-5. Get ultra-fresh 0-1 view videos rotated every second
+4. Sign up at Render.com (free tier)
+5. Deploy API server using render.yaml (auto-deployment)
+6. Deploy frontend to GitHub Pages
+7. Configure Render API URL in frontend settings
+8. Set up keepalive pings (e.g., UptimeRobot) every 14 minutes for 24/7 operation
 
 Full deployment guide: docs/RENDER_DEPLOYMENT.md
+
+### Cold Start Behavior
+
+When the Render.com free tier server sleeps after 15 minutes of inactivity:
+- Frontend automatically detects cold start
+- Shows countdown timer and progress bar (up to 90 seconds)
+- Begins serving videos once server is ready
 
 ## Features
 
 CORE FUNCTIONALITY
 - Mobile & Desktop: Swipe gestures + keyboard controls + navigation buttons
 - Save Videos: Heart button to bookmark interesting finds
-- Smart Fallback: Automatic switch to pre-fetched videos when needed
+- Cold Start Detection: Automatic server wake-up with visual feedback
 - Hourly Updates: GitHub Actions scrapes new videos every hour
-- Zero Setup: End users don't need API keys or configuration
+- Ultra-Fresh Content: Videos with 0-1 views, rotated every second
 
 HOW IT WORKS
-- Render API Mode (optional): Ultra-fresh 0-1 view videos, rotated every second
-- Pre-fetched Mode (automatic): Local database updated hourly via GitHub Actions
 - Render.com backend serves videos with 0-1 views only
 - Pool of 10,000 constantly refreshed videos
 - Discovers videos uploaded within last hour
-- Free tier with keepalive pings
+- 1-second rotation for maximum randomness
+- Free tier with keepalive pings for 24/7 operation
 
 GITHUB ACTIONS AUTOMATION
 - Runs every hour (distributed quota usage)
@@ -81,16 +75,17 @@ DESKTOP
 ## Technical Details
 
 ARCHITECTURE
-- Frontend: Single-page HTML/CSS/JS application
-- Backend (optional): Flask API server on Render.com
+- Frontend: Single-page HTML/CSS/JS application (GitHub Pages)
+- Backend: Flask API server on Render.com (required)
 - Automation: GitHub Actions for hourly video discovery
 - Storage: LocalStorage for preferences and saved videos
 
 VIDEO DISCOVERY
 - Random search queries based on camera file patterns (DSC_1234, IMG_5678, etc.)
-- Filters for recently uploaded videos
-- Only shows videos within configured view count range
-- Queue system loads videos in batches for smooth browsing
+- Filters for videos uploaded within last hour
+- Only serves videos with 0-1 views
+- Backend rotates current video every 1 second
+- Frontend fetches new video on each swipe
 
 API USAGE (GitHub Actions)
 - 1 search per hour = 2,400 quota units/day
@@ -102,13 +97,12 @@ API USAGE (GitHub Actions)
 ```
 UnseenStream/
 ├── index.html                   # Main application
-├── script.js                    # Frontend logic
+├── script.js                    # Frontend logic with cold-start detection
 ├── styles.css                   # Styling
-├── videos.json                  # Pre-fetched videos database
-├── videos_pool.json             # Fresh 0-1 view videos pool
+├── videos_pool.json             # Fresh 0-1 view videos pool (for Render API)
 │
-├── api/                         # Render.com backend (optional)
-│   ├── api_server.py            # Flask API server
+├── api/                         # Render.com backend (required)
+│   ├── api_server.py            # Flask API server with advanced logging
 │   └── requirements.txt         # Python dependencies
 │
 ├── scripts/                     # GitHub Actions automation
@@ -129,23 +123,24 @@ UnseenStream/
 
 ## Deployment
 
-GITHUB PAGES (Recommended for Frontend)
+GITHUB PAGES (Frontend Deployment)
 1. Push to repository
 2. Go to Settings > Pages
 3. Select source: Deploy from main branch
 4. Access at: https://username.github.io/UnseenStream/
+5. Configure Render API URL in settings (https://your-app.onrender.com)
 
-RENDER.COM (Optional Backend for 0-1 View Videos)
+RENDER.COM (Backend Deployment - Required)
 1. Create Web Service on Render.com
 2. Connect GitHub repository
 3. Set environment variable: GITHUB_REPO=username/UnseenStream
 4. Auto-deploys from render.yaml
-5. Set up keepalive pings (e.g., UptimeRobot) every 14 minutes
+5. Set up keepalive pings (e.g., UptimeRobot) every 14 minutes for 24/7 operation
 
 GITHUB ACTIONS (Automatic Video Discovery)
 1. Add repository secret: YOUTUBE_API_KEY
 2. Workflow runs automatically every hour
-3. Commits updated videos_pool.json and videos.json
+3. Commits updated videos_pool.json to repository
 
 ## Configuration
 
