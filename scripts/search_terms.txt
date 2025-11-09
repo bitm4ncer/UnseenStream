@@ -1,0 +1,159 @@
+# UnseenStream Search Terms
+# Targets unintended/accidental uploads with low view counts
+# Each line is a search query to find rare, random footage
+
+# Camera/Phone Default Filenames (most common for accidental uploads)
+MOV
+DSC
+IMG
+VID
+DCIM
+MVI
+PICT
+PIC
+
+# Video File Extensions (people uploading raw files)
+mp4
+avi
+mkv
+mov
+wmv
+flv
+m4v
+3gp
+webm
+
+# Numeric patterns (auto-generated names)
+video
+clip
+recording
+footage
+capture
+screen
+film
+
+# Generic/Default names
+untitled
+test
+new
+draft
+temp
+sample
+output
+render
+
+# Date patterns (YYYYMMDD format - common in camera uploads)
+20241109
+20241108
+20241107
+20241106
+20241105
+20241104
+20241103
+20241102
+20241101
+20241031
+
+# Time-based patterns
+morning
+afternoon
+evening
+today
+yesterday
+
+# Common accidental upload scenarios
+gopro
+drone
+dashcam
+security
+cctv
+webcam
+zoom
+meeting
+stream
+
+# Single letters (catch-all for diverse results)
+a
+b
+c
+d
+e
+f
+g
+h
+i
+j
+k
+l
+m
+n
+o
+p
+q
+r
+s
+t
+u
+v
+w
+x
+y
+z
+
+# Two-letter combinations (more specific but still broad)
+aa
+ab
+ac
+ad
+ae
+af
+
+# Numbers (sequence videos, tests)
+1
+2
+3
+4
+5
+123
+test1
+test2
+video1
+video2
+
+# Regional/Language variations
+vídeo
+vidéo
+視頻
+影片
+動画
+비디오
+видео
+
+# Camera brands/models (people don't rename)
+canon
+nikon
+sony
+samsung
+iphone
+android
+xiaomi
+huawei
+gopro
+dji
+
+# File transfer artifacts
+whatsapp
+telegram
+messenger
+share
+send
+received
+download
+
+# Common typos/lazy titles
+asdf
+qwerty
+zzz
+aaa
+xxx
+test123

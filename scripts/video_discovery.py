@@ -17,6 +17,7 @@ from googleapiclient.errors import HttpError
 # Configuration
 API_KEY = os.environ.get('YOUTUBE_API_KEY', '')
 POOL_FILE = 'videos_pool.json'
+SEARCH_TERMS_FILE = 'scripts/search_terms.txt'
 MAX_POOL_SIZE = 50000
 MIN_POOL_SIZE = 1000  # Never delete videos if pool is below this
 
@@ -29,6 +30,23 @@ SEARCHES_PER_RUN = 6  # Six searches per hour = 144 searches/day
 MAX_VIEW_COUNT = 100  # Only videos with 0-100 views
 MAX_VIDEO_AGE_HOURS = None  # Keep videos indefinitely (only remove when views exceed MAX_VIEW_COUNT)
 VIEW_CHECK_BATCH_SIZE = 50  # Check up to 50 videos per API call
+
+
+def load_search_terms():
+    """Load search terms from file"""
+    try:
+        with open(SEARCH_TERMS_FILE, 'r') as f:
+            terms = []
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if line and not line.startswith('#'):
+                    terms.append(line)
+            return terms
+    except FileNotFoundError:
+        print(f"WARNING: {SEARCH_TERMS_FILE} not found, using fallback terms")
+        # Fallback to basic search terms if file is missing
+        return ['MOV', 'DSC', 'IMG', 'VID', 'mp4', 'video', 'test']
 
 
 def load_pool():
@@ -64,24 +82,25 @@ def get_published_after():
     return date.isoformat() + 'Z'
 
 
-def search_recent_videos(youtube):
+def search_recent_videos(youtube, search_term):
     """
-    Get the newest videos uploaded to YouTube.
-    No filters, no queries - just pure chronological order.
-    This finds truly random, unfiltered content (MOV_1234.mp4, etc.)
+    Search for newest videos using a specific search term.
+    Targets unintended uploads by searching for camera filenames,
+    file extensions, and other patterns common in accidental uploads.
     """
     published_after = get_published_after()
 
     print(f"\nSearching for newest videos:")
+    print(f"  Query: '{search_term}'")
     print(f"  Published after: {published_after}")
     print(f"  Max results: {MAX_RESULTS_PER_SEARCH}")
-    print(f"  No filters - pure chronological order")
 
     try:
-        # No query (q parameter) = all videos
+        # Search with query term to find unintended uploads
         # order='date' = newest first
-        # This gets us the rawest, most random uploads
+        # This targets accidental uploads (MOV_1234.mp4, DSC_5678.avi, etc.)
         search_response = youtube.search().list(
+            q=search_term,
             type='video',
             part='id,snippet',
             maxResults=MAX_RESULTS_PER_SEARCH,
@@ -243,18 +262,25 @@ def main():
 
     youtube = build('youtube', 'v3', developerKey=API_KEY)
 
+    # Load search terms
+    search_terms = load_search_terms()
+    print(f"\nLoaded {len(search_terms)} search terms")
+
     # Load existing pool
     existing_videos = load_pool()
-    print(f"\nLoaded {len(existing_videos)} existing videos from pool")
+    print(f"Loaded {len(existing_videos)} existing videos from pool")
 
-    # Search for new videos (perform multiple searches for diversity)
+    # Search for new videos (perform multiple searches with different terms)
     print(f"\nPerforming {SEARCHES_PER_RUN} searches for videos uploaded in last {SEARCH_WINDOW_HOURS} hour(s)...")
     all_new_video_ids = []
     existing_ids = {v['id'] for v in existing_videos}
 
-    for search_num in range(1, SEARCHES_PER_RUN + 1):
+    # Randomly select search terms for diversity
+    selected_terms = random.sample(search_terms, min(SEARCHES_PER_RUN, len(search_terms)))
+
+    for search_num, search_term in enumerate(selected_terms, 1):
         print(f"\n--- Search {search_num}/{SEARCHES_PER_RUN} ---")
-        video_ids = search_recent_videos(youtube)
+        video_ids = search_recent_videos(youtube, search_term)
 
         # Filter out duplicates and already-existing IDs
         for vid in video_ids:
