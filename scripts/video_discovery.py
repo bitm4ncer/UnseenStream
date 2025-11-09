@@ -66,29 +66,22 @@ def get_published_after():
 
 def search_recent_videos(youtube):
     """
-    Search for videos uploaded recently.
-    Uses random search queries to discover diverse content.
+    Get the newest videos uploaded to YouTube.
+    No filters, no queries - just pure chronological order.
+    This finds truly random, unfiltered content (MOV_1234.mp4, etc.)
     """
     published_after = get_published_after()
 
-    # Random single-character or two-character search queries
-    # These find truly random videos across all languages
-    random_queries = [
-        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
-        '1', '2', '3', '4', '5',
-        'test', 'video', 'vlog', 'new', 'live'
-    ]
-
-    query = random.choice(random_queries)
-
-    print(f"\nSearching for videos:")
-    print(f"  Query: '{query}'")
+    print(f"\nSearching for newest videos:")
     print(f"  Published after: {published_after}")
     print(f"  Max results: {MAX_RESULTS_PER_SEARCH}")
+    print(f"  No filters - pure chronological order")
 
     try:
+        # No query (q parameter) = all videos
+        # order='date' = newest first
+        # This gets us the rawest, most random uploads
         search_response = youtube.search().list(
-            q=query,
             type='video',
             part='id,snippet',
             maxResults=MAX_RESULTS_PER_SEARCH,
