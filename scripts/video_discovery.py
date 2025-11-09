@@ -66,35 +66,34 @@ def get_published_after():
 
 def search_recent_videos(youtube):
     """
-    Search for videos uploaded in the last hour.
-    Uses random region/language for diversity.
+    Search for videos uploaded recently.
+    Uses random search queries to discover diverse content.
     """
     published_after = get_published_after()
 
-    # Randomize for diversity
-    regions = ['US', 'GB', 'CA', 'AU', 'IN', 'BR', 'JP', 'DE', 'FR', 'KR',
-               'MX', 'ES', 'IT', 'RU', 'NL', 'SE', 'NO', 'PL', 'ID', 'TH']
-    languages = ['en', 'es', 'pt', 'ja', 'ko', 'hi', 'fr', 'de', 'it',
-                 'ru', 'ar', 'zh', 'th', 'vi', 'id', 'tr', 'pl', 'nl']
+    # Random single-character or two-character search queries
+    # These find truly random videos across all languages
+    random_queries = [
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+        '1', '2', '3', '4', '5',
+        'test', 'video', 'vlog', 'new', 'live'
+    ]
 
-    region = random.choice(regions)
-    language = random.choice(languages)
+    query = random.choice(random_queries)
 
     print(f"\nSearching for videos:")
-    print(f"  Region: {region}")
-    print(f"  Language: {language}")
+    print(f"  Query: '{query}'")
     print(f"  Published after: {published_after}")
     print(f"  Max results: {MAX_RESULTS_PER_SEARCH}")
 
     try:
         search_response = youtube.search().list(
+            q=query,
             type='video',
             part='id,snippet',
             maxResults=MAX_RESULTS_PER_SEARCH,
             order='date',
-            publishedAfter=published_after,
-            regionCode=region,
-            relevanceLanguage=language
+            publishedAfter=published_after
         ).execute()
 
         video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
