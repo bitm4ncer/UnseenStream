@@ -8,13 +8,6 @@
 </head>
 <body>
   
-  <!-- Fade Controls Button -->
-  <button class="icon-btn" id="fade-btn" onclick="toggleControls()" title="Show/hide controls">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M18 15l-6-6-6 6"/>
-    </svg>
-  </button>
-
   <!-- Video Container -->
   <div id="video-container">
     <div id="loading">Finding random videos...</div>
@@ -47,13 +40,7 @@
 
     <!-- Action Buttons -->
     <div class="action-buttons">
-      <button id="heart-btn" onclick="toggleSave()">♡</button>
-      <button id="library-btn" onclick="openSaved()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
-      </button>
+      <button id="heart-btn" onclick="toggleSave()" title="Save video">♡</button>
       <button id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
         <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -61,6 +48,17 @@
         <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
           <rect x="6" y="4" width="4" height="16"></rect>
           <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
+      <button id="library-btn" onclick="openSaved()" title="Saved videos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+      </button>
+      <button id="fade-btn" onclick="toggleControls()" title="Hide controls">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 15l-6-6-6 6"/>
         </svg>
       </button>
     </div>

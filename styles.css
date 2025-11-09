@@ -17,11 +17,16 @@ body {
 #video-container {
   position: relative;
   width: 100vw;
-  height: calc(100vh - 200px);
+  height: 100vh;
   background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: height 0.3s ease;
+}
+
+body.controls-visible #video-container {
+  height: calc(100vh - 200px);
 }
 
 #player {
@@ -224,12 +229,12 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  padding: 12px;
+  padding: 14px;
 }
 
 #autoplay-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   color: white;
 }
 
@@ -266,22 +271,17 @@ body {
 
 /* Fade Controls Button */
 #fade-btn {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  width: 44px;
-  height: 44px;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  z-index: 100;
-  padding: 10px;
+  padding: 14px;
 }
 
 #fade-btn svg {
@@ -296,7 +296,8 @@ body {
 }
 
 #fade-btn:hover {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
 }
 
 #fade-btn:active {

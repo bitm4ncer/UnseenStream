@@ -539,7 +539,13 @@ function toggleControls() {
 
   controls.classList.toggle('hidden', !controlsVisible);
   fadeBtn.classList.toggle('rotated', !controlsVisible);
+  document.body.classList.toggle('controls-visible', controlsVisible);
 }
+
+// Initialize controls visibility on load
+window.addEventListener('DOMContentLoaded', () => {
+  document.body.classList.add('controls-visible');
+});
 
 function togglePlayPause() {
   if (!player || !player.getPlayerState) return;
