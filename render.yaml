@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: unseenstream-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r api/requirements.txt
+    startCommand: cd api && gunicorn api_server:app
+    healthCheckPath: /health
+    envVars:
+      - key: GITHUB_REPO
+        sync: false
+      - key: POOL_REFRESH_MINUTES
+        value: 60
