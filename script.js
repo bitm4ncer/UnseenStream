@@ -20,14 +20,8 @@ let isColdStarting = false;
 // Viewed videos tracking (to prevent duplicates)
 let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
 
-const DEFAULT_PREFERENCES = {
-  maxViews: 1000,
-  minViews: 0,
-  dateRange: 7,
-  patterns: ['DSC', 'IMG', 'MOV', 'VID']
-};
-
-let preferences = JSON.parse(localStorage.getItem('preferences')) || DEFAULT_PREFERENCES;
+// Controls visibility state
+let controlsVisible = true;
 
 // ============================================
 // Cold Start Detection & UI
@@ -256,6 +250,9 @@ function onPlayerReady(event) {
 }
 
 function onPlayerStateChange(event) {
+  // Update play/pause button
+  updatePlayPauseButton();
+
   // Preload next video when current video starts playing
   if (event.data === YT.PlayerState.PLAYING) {
     preloadNextVideo();
@@ -441,7 +438,7 @@ function handleSwipe() {
 // Keyboard support for desktop
 document.addEventListener('keydown', (e) => {
   // Prevent default arrow key behavior (scrolling)
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
     e.preventDefault();
   }
 
@@ -449,8 +446,12 @@ document.addEventListener('keydown', (e) => {
     nextVideo();
   } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
     previousVideo();
+  } else if (e.key === ' ') {
+    togglePlayPause();
   } else if (e.key === 's' || e.key === 'S') {
     toggleSave();
+  } else if (e.key === 'h' || e.key === 'H') {
+    toggleControls();
   }
 });
 
@@ -528,61 +529,46 @@ function loadAutoplayPreference() {
 window.addEventListener('DOMContentLoaded', loadAutoplayPreference);
 
 // ============================================
-// Settings Modal
+// UI Controls
 // ============================================
 
-function openSettings() {
-  // Load current preferences
-  document.getElementById('max-views').value = preferences.maxViews;
-  document.getElementById('min-views').value = preferences.minViews;
-  document.getElementById('date-range').value = preferences.dateRange;
+function toggleControls() {
+  controlsVisible = !controlsVisible;
+  const controls = document.getElementById('controls');
+  const fadeBtn = document.getElementById('fade-btn');
 
-  // Update checkboxes
-  const checkboxes = document.querySelectorAll('#patterns-group input[type="checkbox"]');
-  checkboxes.forEach(cb => {
-    cb.checked = preferences.patterns.includes(cb.value);
-    cb.parentElement.classList.toggle('checked', cb.checked);
-  });
-
-  document.getElementById('settings-modal').classList.add('show');
+  controls.classList.toggle('hidden', !controlsVisible);
+  fadeBtn.classList.toggle('rotated', !controlsVisible);
 }
 
-function closeSettings() {
-  document.getElementById('settings-modal').classList.remove('show');
-}
+function togglePlayPause() {
+  if (!player || !player.getPlayerState) return;
 
-function saveSettings() {
-  // Get selected patterns
-  const checkedBoxes = document.querySelectorAll('#patterns-group input[type="checkbox"]:checked');
-  const patterns = Array.from(checkedBoxes).map(cb => cb.value);
+  const state = player.getPlayerState();
+  const playPauseBtn = document.getElementById('play-pause-btn');
 
-  if (patterns.length === 0) {
-    alert('Please select at least one title pattern');
-    return;
+  if (state === YT.PlayerState.PLAYING) {
+    player.pauseVideo();
+    playPauseBtn.classList.remove('playing');
+  } else {
+    player.playVideo();
+    playPauseBtn.classList.add('playing');
   }
-
-  preferences = {
-    maxViews: parseInt(document.getElementById('max-views').value),
-    minViews: parseInt(document.getElementById('min-views').value),
-    dateRange: parseInt(document.getElementById('date-range').value),
-    patterns: patterns
-  };
-
-  localStorage.setItem('preferences', JSON.stringify(preferences));
-
-  // Clear queue and fetch new videos with new preferences
-  videoQueue = [];
-  currentIndex = 0;
-  closeSettings();
-  fetchVideos();
 }
 
-// Checkbox styling
-document.getElementById('patterns-group').addEventListener('change', (e) => {
-  if (e.target.type === 'checkbox') {
-    e.target.parentElement.classList.toggle('checked', e.target.checked);
+// Update play/pause button state when player state changes
+function updatePlayPauseButton() {
+  if (!player || !player.getPlayerState) return;
+
+  const state = player.getPlayerState();
+  const playPauseBtn = document.getElementById('play-pause-btn');
+
+  if (state === YT.PlayerState.PLAYING) {
+    playPauseBtn.classList.add('playing');
+  } else {
+    playPauseBtn.classList.remove('playing');
   }
-});
+}
 
 // ============================================
 // Saved Videos Modal

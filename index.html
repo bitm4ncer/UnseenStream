@@ -8,19 +8,12 @@
 </head>
 <body>
   
-  <!-- Top Bar -->
-  <div class="top-bar">
-    <button class="icon-btn" id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
-      <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
-      <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-        <rect x="6" y="4" width="4" height="16"></rect>
-        <rect x="14" y="4" width="4" height="16"></rect>
-      </svg>
-    </button>
-    <button class="icon-btn" id="settings-btn" onclick="openSettings()">⚙️</button>
-  </div>
+  <!-- Fade Controls Button -->
+  <button class="icon-btn" id="fade-btn" onclick="toggleControls()" title="Show/hide controls">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M18 15l-6-6-6 6"/>
+    </svg>
+  </button>
 
   <!-- Video Container -->
   <div id="video-container">
@@ -28,85 +21,48 @@
     <div id="player"></div>
     <div id="preload-player" style="display: none;"></div>
     
-    <!-- Controls -->
-    <div id="controls">
-      <div id="video-info">
-        <div id="video-title">Loading...</div>
-        <div id="video-stats"></div>
-      </div>
+  </div>
+
+  <!-- Controls (below video) -->
+  <div id="controls">
+    <div id="video-info">
+      <div id="video-title">Loading...</div>
+      <div id="video-stats"></div>
     </div>
-
-    <!-- Heart Button -->
-    <button id="heart-btn" onclick="toggleSave()">♡</button>
-
-    <!-- Library Button -->
-    <button id="library-btn" onclick="openSaved()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-      </svg>
-    </button>
 
     <!-- Navigation Buttons -->
     <div class="nav-buttons">
       <button class="nav-btn" id="prev-btn" onclick="previousVideo()" title="Previous video (← or ↓)">Prev</button>
+      <button class="nav-btn" id="play-pause-btn" onclick="togglePlayPause()" title="Play/Pause (Space)">
+        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
       <button class="nav-btn" id="next-btn" onclick="nextVideo()" title="Next video (→ or ↑)">Next</button>
     </div>
-  </div>
 
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Preferences</h2>
-        <button class="close-btn" onclick="closeSettings()">×</button>
-      </div>
-      
-      <div class="form-group">
-        <label>Max View Count</label>
-        <input type="number" id="max-views" value="1000" min="0" max="100000" step="100">
-      </div>
-
-      <div class="form-group">
-        <label>Min View Count</label>
-        <input type="number" id="min-views" value="0" min="0" max="10000" step="10">
-      </div>
-
-      <div class="form-group">
-        <label>Videos Uploaded Within</label>
-        <select id="date-range">
-          <option value="7">Last 7 days</option>
-          <option value="14">Last 14 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Title Patterns (select all that apply)</label>
-        <div class="checkbox-group" id="patterns-group">
-          <label class="checkbox-item checked">
-            <input type="checkbox" value="DSC" checked> DSC
-          </label>
-          <label class="checkbox-item checked">
-            <input type="checkbox" value="IMG" checked> IMG
-          </label>
-          <label class="checkbox-item checked">
-            <input type="checkbox" value="MOV" checked> MOV
-          </label>
-          <label class="checkbox-item checked">
-            <input type="checkbox" value="VID" checked> VID
-          </label>
-          <label class="checkbox-item">
-            <input type="checkbox" value="GOPR"> GOPR
-          </label>
-          <label class="checkbox-item">
-            <input type="checkbox" value="DJI"> DJI
-          </label>
-        </div>
-      </div>
-
-      <button class="btn-primary" onclick="saveSettings()">Apply & Search</button>
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button id="heart-btn" onclick="toggleSave()">♡</button>
+      <button id="library-btn" onclick="openSaved()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+      </button>
+      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
+        <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
     </div>
   </div>
 

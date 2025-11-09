@@ -17,7 +17,7 @@ body {
 #video-container {
   position: relative;
   width: 100vw;
-  height: 100vh;
+  height: calc(100vh - 200px);
   background: #000;
   display: flex;
   align-items: center;
@@ -108,25 +108,28 @@ body {
   display: none;
 }
 
-/* Controls Overlay */
+/* Controls (below video, not overlay) */
 #controls {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  width: 100vw;
+  min-height: 200px;
   padding: 20px;
-  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
-  pointer-events: none;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-#controls > * {
-  pointer-events: auto;
+#controls.hidden {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Video Info */
 #video-info {
-  max-width: calc(100% - 80px);
-  margin-bottom: 10px;
+  text-align: center;
 }
 
 #video-title {
@@ -147,24 +150,27 @@ body {
   color: #ddd;
 }
 
+/* Action Buttons Container */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 10px;
+}
+
 /* Heart Button */
 #heart-btn {
-  position: absolute;
-  right: 92px;
-  bottom: 14px;;
-  width: 60px;
-  height: 60px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  font-size: 28px;
+  font-size: 24px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  z-index: 10;
 }
 
 #heart-btn:active {
@@ -178,22 +184,17 @@ body {
 
 /* Library Button */
 #library-btn {
-  position: absolute;
-  right: 20px;
-  bottom: 14px;
-  width: 60px;
-  height: 60px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  z-index: 10;
-  padding: 16px;
+  padding: 12px;
 }
 
 #library-btn svg {
@@ -203,7 +204,7 @@ body {
 }
 
 #library-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
 }
 
@@ -211,36 +212,19 @@ body {
   transform: scale(0.9);
 }
 
-/* Top Bar Buttons */
-.top-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  z-index: 100;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
-}
-
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: none;
+/* Autoplay Button */
+#autoplay-btn {
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  font-size: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-}
-
-.icon-btn:active {
-  transform: scale(0.9);
+  padding: 12px;
 }
 
 #autoplay-btn svg {
@@ -250,16 +234,17 @@ body {
 }
 
 #autoplay-btn .play-icon {
-  padding-left: 2px;
-}
-
-/* Show play icon by default, pause icon when active */
-#autoplay-btn .play-icon {
   display: block;
+  padding-left: 2px;
 }
 
 #autoplay-btn .pause-icon {
   display: none;
+}
+
+#autoplay-btn.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.5);
 }
 
 #autoplay-btn.active .play-icon {
@@ -268,6 +253,54 @@ body {
 
 #autoplay-btn.active .pause-icon {
   display: block;
+}
+
+#autoplay-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+#autoplay-btn:active {
+  transform: scale(0.9);
+}
+
+/* Fade Controls Button */
+#fade-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 100;
+  padding: 10px;
+}
+
+#fade-btn svg {
+  width: 100%;
+  height: 100%;
+  color: white;
+  transition: transform 0.3s ease;
+}
+
+#fade-btn.rotated svg {
+  transform: rotate(180deg);
+}
+
+#fade-btn:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+#fade-btn:active {
+  transform: scale(0.9);
 }
 
 /* Modal Base */
@@ -336,78 +369,6 @@ body {
   justify-content: center;
 }
 
-/* Settings Form */
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: white;
-  font-size: 16px;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.checkbox-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.checkbox-item {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.checkbox-item input {
-  margin-right: 8px;
-}
-
-.checkbox-item.checked {
-  background: rgba(59, 130, 246, 0.5);
-  border-color: rgba(59, 130, 246, 0.8);
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 14px;
-  background: #3b82f6;
-  border: none;
-  border-radius: 8px;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:active {
-  transform: scale(0.98);
-  background: #2563eb;
-}
 
 /* Saved Videos List */
 .video-list {
@@ -530,13 +491,9 @@ body {
 
 /* Navigation Buttons Container */
 .nav-buttons {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
+  justify-content: center;
   gap: 12px;
-  z-index: 10;
 }
 
 /* Navigation Buttons */
@@ -544,9 +501,8 @@ body {
   min-width: 80px;
   height: 44px;
   padding: 0 24px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   border-radius: 22px;
   font-size: 16px;
   font-weight: 500;
@@ -555,23 +511,44 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   transition: all 0.2s ease;
   user-select: none;
 }
 
+/* Play/Pause Button Special Styling */
+#play-pause-btn {
+  min-width: 60px;
+  padding: 0 18px;
+}
+
+#play-pause-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+#play-pause-btn .play-icon {
+  display: block;
+}
+
+#play-pause-btn .pause-icon {
+  display: none;
+}
+
+#play-pause-btn.playing .play-icon {
+  display: none;
+}
+
+#play-pause-btn.playing .pause-icon {
+  display: block;
+}
+
 .nav-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
   transform: scale(1.05);
 }
 
 .nav-btn:active {
   transform: scale(0.95);
-}
-
-/* Adjust heart button position on desktop to avoid overlap */
-@media (min-width: 768px) {
-  #heart-btn {
-    right: 100px;
-  }
 }
