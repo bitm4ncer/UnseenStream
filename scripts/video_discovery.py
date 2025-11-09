@@ -16,17 +16,17 @@ from googleapiclient.errors import HttpError
 # Configuration
 API_KEY = os.environ.get('YOUTUBE_API_KEY', '')
 POOL_FILE = 'videos_pool.json'
-MAX_POOL_SIZE = 10000
+MAX_POOL_SIZE = 50000
 MIN_POOL_SIZE = 1000  # Never delete videos if pool is below this
 
 # Search Configuration
 SEARCH_WINDOW_HOURS = 1  # Look for videos uploaded in last 1 hour
 MAX_RESULTS_PER_SEARCH = 50
-SEARCHES_PER_RUN = 1  # One search per hour = 24 searches/day
+SEARCHES_PER_RUN = 6  # Six searches per hour = 144 searches/day
 
 # Filter Configuration
-MAX_VIEW_COUNT = 1  # Only videos with 0-1 views
-MAX_VIDEO_AGE_HOURS = 48  # Remove videos older than 48 hours
+MAX_VIEW_COUNT = 100  # Only videos with 0-100 views
+MAX_VIDEO_AGE_HOURS = None  # Keep videos indefinitely (only remove when views exceed MAX_VIEW_COUNT)
 VIEW_CHECK_BATCH_SIZE = 50  # Check up to 50 videos per API call
 
 
@@ -170,15 +170,18 @@ def update_existing_videos(youtube, existing_videos):
         discovered_at = datetime.fromisoformat(video['discoveredAt'].replace('Z', ''))
         age_hours = (now - discovered_at).total_seconds() / 3600
 
-        # Remove videos older than MAX_VIDEO_AGE_HOURS
-        if age_hours > MAX_VIDEO_AGE_HOURS:
+        # Remove videos older than MAX_VIDEO_AGE_HOURS (if age limit is set)
+        if MAX_VIDEO_AGE_HOURS is not None and age_hours > MAX_VIDEO_AGE_HOURS:
             continue
 
         fresh_videos.append(video)
 
     if len(fresh_videos) < len(existing_videos):
         removed = len(existing_videos) - len(fresh_videos)
-        print(f"  Removed {removed} videos older than {MAX_VIDEO_AGE_HOURS} hours")
+        if MAX_VIDEO_AGE_HOURS is not None:
+            print(f"  Removed {removed} videos older than {MAX_VIDEO_AGE_HOURS} hours")
+        else:
+            print(f"  Kept all {len(fresh_videos)} videos (no age limit)")
 
     # Batch check view counts for a sample of fresh videos
     # To save quota, we only check a portion each run

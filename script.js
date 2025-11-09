@@ -17,6 +17,9 @@ let isLoading = false;
 let isAutoplayEnabled = false;
 let isColdStarting = false;
 
+// Viewed videos tracking (to prevent duplicates)
+let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
+
 const DEFAULT_PREFERENCES = {
   maxViews: 1000,
   minViews: 0,
@@ -121,13 +124,24 @@ async function fetchFromRenderAPI() {
 
   try {
     console.log('Fetching from Render API...');
-    const response = await fetch(`${RENDER_API_URL}/current-video`, {
-      method: 'GET',
+
+    // Prepare request with excluded video IDs
+    const excludedIds = Array.from(viewedVideos);
+    const requestOptions = {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        excluded_ids: excludedIds
+      }),
       signal: AbortSignal.timeout(5000) // 5 second timeout
-    });
+    };
+
+    console.log(`Excluding ${excludedIds.length} already viewed videos`);
+
+    const response = await fetch(`${RENDER_API_URL}/current-video`, requestOptions);
 
     if (response.status === 503) {
       // Service not ready (pool loading)
@@ -147,7 +161,19 @@ async function fetchFromRenderAPI() {
       return null;
     }
 
-    console.log('✓ Got video from Render API:', video.title);
+    console.log('✓ Got video from Render API:', video.title, `(${video.viewCount} views)`);
+
+    // Mark this video as viewed
+    viewedVideos.add(video.id);
+    localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
+
+    // Auto-reset if we've viewed too many videos (keep last 1000)
+    if (viewedVideos.size > 1000) {
+      const viewedArray = Array.from(viewedVideos);
+      viewedVideos = new Set(viewedArray.slice(-1000));
+      localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
+      console.log('Reset viewed videos cache (kept last 1000)');
+    }
 
     // Convert to format expected by loadVideo
     return {

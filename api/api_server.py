@@ -74,14 +74,52 @@ def fetch_video_pool():
         return False
 
 
+def select_weighted_video(pool, excluded_ids=None):
+    """
+    Select a video with weighted randomness based on view count.
+    Videos with fewer views have higher probability of being selected.
+    0 views = highest weight, 100 views = lowest weight.
+
+    Args:
+        pool: List of video objects
+        excluded_ids: Set of video IDs to exclude (already viewed)
+
+    Returns:
+        Selected video object or None
+    """
+    if not pool:
+        return None
+
+    # Filter out excluded videos
+    if excluded_ids:
+        available_pool = [v for v in pool if v.get('id') not in excluded_ids]
+        if not available_pool:
+            # All videos viewed, reset and use full pool
+            available_pool = pool
+    else:
+        available_pool = pool
+
+    # Calculate weights: (101 - viewCount) so 0 views = weight 101, 100 views = weight 1
+    weights = []
+    for video in available_pool:
+        view_count = video.get('viewCount', 0)
+        weight = 101 - min(view_count, 100)  # Ensure weight is always positive
+        weights.append(weight)
+
+    # Use random.choices() for weighted selection
+    selected = random.choices(available_pool, weights=weights, k=1)[0]
+    return selected
+
+
 def video_rotator():
     """
-    Background thread that picks a random video every second.
+    Background thread that picks a weighted random video every second.
+    Videos with lower view counts are more likely to be selected.
     This is the core of the "1 video per second" rotation system.
     """
     global current_video, videos_served
 
-    logger.info("Video rotator thread started")
+    logger.info("Video rotator thread started with weighted selection")
     last_pool_refresh = time.time()
     rotation_count = 0
 
@@ -93,9 +131,9 @@ def video_rotator():
                 fetch_video_pool()
                 last_pool_refresh = time.time()
 
-            # Pick random video if pool is available
+            # Pick weighted random video if pool is available
             if video_pool:
-                current_video = random.choice(video_pool)
+                current_video = select_weighted_video(video_pool)
                 videos_served += 1
                 rotation_count += 1
 
@@ -161,20 +199,45 @@ def health():
     })
 
 
-@app.route('/current-video')
+@app.route('/current-video', methods=['GET', 'POST'])
 def get_current_video():
-    """Get the current random video (changes every second)"""
+    """
+    Get a weighted random video from the pool.
+    POST method allows sending excluded video IDs to prevent duplicates.
+
+    POST body (optional):
+    {
+        "excluded_ids": ["video_id_1", "video_id_2", ...]
+    }
+    """
     client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-    if current_video is None:
-        logger.warning(f"Video request from {client_ip} - service not ready")
+    if not video_pool:
+        logger.warning(f"Video request from {client_ip} - pool empty")
         return jsonify({
-            'error': 'Service starting',
-            'message': 'Video pool is loading, please try again in a few seconds'
+            'error': 'No videos available',
+            'message': 'Video pool is empty. GitHub Actions may be building it.'
         }), 503
 
-    logger.debug(f"Served video to {client_ip}: {current_video.get('title', 'Unknown')[:50]}")
-    return jsonify(current_video)
+    # Get excluded IDs from POST request
+    excluded_ids = None
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        excluded_ids = set(data.get('excluded_ids', []))
+        logger.debug(f"Client sent {len(excluded_ids)} excluded IDs")
+
+    # Select weighted random video
+    selected_video = select_weighted_video(video_pool, excluded_ids)
+
+    if selected_video is None:
+        logger.warning(f"Video request from {client_ip} - selection failed")
+        return jsonify({
+            'error': 'Selection failed',
+            'message': 'Could not select a video from the pool'
+        }), 500
+
+    logger.debug(f"Served video to {client_ip}: {selected_video.get('title', 'Unknown')[:50]} (Views: {selected_video.get('viewCount', 'N/A')})")
+    return jsonify(selected_video)
 
 
 @app.route('/stats')

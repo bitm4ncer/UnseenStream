@@ -7,10 +7,10 @@ Live Demo: https://bitm4ncer.github.io/UnseenStream/
 
 ## Overview
 
-UnseenStream streams videos with 0-1 views from a Flask backend API hosted on Render.com,
+UnseenStream streams videos with 0-100 views from a Flask backend API hosted on Render.com,
 with videos rotated every 1 second for truly random, never-before-seen content.
 
-The backend maintains a pool of 10,000 ultra-fresh videos (uploaded within the last hour),
+The backend maintains a pool of up to 50,000 ultra-fresh videos (uploaded within the last hour),
 automatically refreshed hourly via GitHub Actions.
 
 ## Quick Start
@@ -42,21 +42,24 @@ CORE FUNCTIONALITY
 - Save Videos: Heart button to bookmark interesting finds
 - Cold Start Detection: Automatic server wake-up with visual feedback
 - Hourly Updates: GitHub Actions scrapes new videos every hour
-- Ultra-Fresh Content: Videos with 0-1 views, rotated every second
+- Ultra-Fresh Content: Videos with 0-100 views, weighted toward 0 views
+- No Duplicates: Tracks viewed videos to ensure fresh content per user
 
 HOW IT WORKS
-- Render.com backend serves videos with 0-1 views only
-- Pool of 10,000 constantly refreshed videos
+- Render.com backend serves videos with 0-100 views
+- Weighted random selection: 0 views = highest priority, 100 views = lowest
+- Pool of up to 50,000 constantly refreshed videos
 - Discovers videos uploaded within last hour
 - 1-second rotation for maximum randomness
+- Duplicate prevention via LocalStorage tracking
 - Free tier with keepalive pings for 24/7 operation
 
 GITHUB ACTIONS AUTOMATION
 - Runs every hour (distributed quota usage)
 - Discovers ultra-fresh videos (uploaded in last hour)
-- Maintains pool of up to 10,000 videos with 0-1 views
-- Removes videos when views exceed 1 or older than 48 hours
-- Uses approximately 2,800 quota units/day
+- Maintains pool of up to 50,000 videos with 0-100 views
+- Removes videos when views exceed 100
+- Uses approximately 6,400 quota units/day (64% of free quota)
 
 ## Controls
 
@@ -80,17 +83,23 @@ ARCHITECTURE
 - Automation: GitHub Actions for hourly video discovery
 - Storage: LocalStorage for preferences and saved videos
 
-VIDEO DISCOVERY
-- Random search queries based on camera file patterns (DSC_1234, IMG_5678, etc.)
+VIDEO DISCOVERY & SELECTION
+- Random search queries with geographic and language diversity
 - Filters for videos uploaded within last hour
-- Only serves videos with 0-1 views
+- Only serves videos with 0-100 views
+- Weighted random selection algorithm:
+  * 0 views = weight 101 (highest priority)
+  * 100 views = weight 1 (lowest priority)
+  * Maintains randomness while favoring fresher content
+- Duplicate prevention: tracks up to 1000 viewed videos per user
 - Backend rotates current video every 1 second
 - Frontend fetches new video on each swipe
+- Discovers ~270 new videos per hour
 
 API USAGE (GitHub Actions)
-- 1 search per hour = 2,400 quota units/day
+- 6 searches per hour = 6,000 quota units/day
 - View count checks = approximately 400 units/day
-- Total: approximately 2,800 units/day (7,200 units buffer remaining)
+- Total: approximately 6,400 units/day (3,600 units buffer remaining)
 
 ## File Structure
 
