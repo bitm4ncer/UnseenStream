@@ -601,6 +601,8 @@ function toggleControls() {
 // Initialize controls visibility on load
 window.addEventListener('DOMContentLoaded', () => {
   document.body.classList.add('controls-visible');
+  // Initialize navigation buttons as disabled until videos load
+  updateNavigationButtons();
 });
 
 function togglePlayPause() {
