@@ -159,19 +159,8 @@ async function fetchFromRenderAPI() {
 
     console.log('✓ Got video from Render API:', video.title, `(${video.viewCount} views)`);
 
-    // Mark this video as viewed
-    viewedVideos.add(video.id);
-    localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
-
-    // Auto-reset if we've viewed too many videos (keep last 1000)
-    if (viewedVideos.size > 1000) {
-      const viewedArray = Array.from(viewedVideos);
-      viewedVideos = new Set(viewedArray.slice(-1000));
-      localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
-      console.log('Reset viewed videos cache (kept last 1000)');
-    }
-
     // Convert to format expected by loadVideo
+    // Note: Video will be marked as viewed when actually loaded in loadVideo()
     return {
       id: { videoId: video.id },
       snippet: {
@@ -375,6 +364,18 @@ function loadVideo(video, direction = 'next') {
     document.getElementById('video-stats').textContent =
       `${viewCount.toLocaleString()} views • ${channelName}`;
 
+    // Mark this video as viewed (for cache/deduplication)
+    viewedVideos.add(videoId);
+    localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
+
+    // Auto-reset if we've viewed too many videos (keep last 1000)
+    if (viewedVideos.size > 1000) {
+      const viewedArray = Array.from(viewedVideos);
+      viewedVideos = new Set(viewedArray.slice(-1000));
+      localStorage.setItem('viewed_videos', JSON.stringify(Array.from(viewedVideos)));
+      console.log('Reset viewed videos cache (kept last 1000)');
+    }
+
     updateHeartButton();
     updateNavigationButtons();
 
@@ -401,8 +402,9 @@ function updateNavigationButtons() {
   }
 
   if (nextBtn) {
-    // Enable next button if we have videos in queue or can fetch more
-    nextBtn.disabled = videoQueue.length === 0;
+    // Disable next only if we're at the end of queue AND currently loading
+    // This allows fetching more videos when needed
+    nextBtn.disabled = (currentIndex >= videoQueue.length - 1) && isLoading;
   }
 }
 
