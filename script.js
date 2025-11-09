@@ -324,6 +324,7 @@ async function fetchVideos() {
       if (!currentVideo && videoQueue.length > 0) {
         loadVideo(videoQueue[0]);
       }
+      updateNavigationButtons();
       loadingEl.classList.add('hidden');
     } else {
       // API failed, show error
@@ -373,6 +374,7 @@ function loadVideo(video, direction = 'next') {
       `${viewCount.toLocaleString()} views • ${channelName}`;
 
     updateHeartButton();
+    updateNavigationButtons();
 
     // Add slide-in animation
     playerElement.className = slideInClass;
@@ -388,6 +390,20 @@ function loadVideo(video, direction = 'next') {
 // Navigation
 // ============================================
 
+function updateNavigationButtons() {
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+
+  if (prevBtn) {
+    prevBtn.disabled = currentIndex <= 0;
+  }
+
+  if (nextBtn) {
+    // Enable next button if we have videos in queue or can fetch more
+    nextBtn.disabled = videoQueue.length === 0;
+  }
+}
+
 function nextVideo() {
   currentIndex++;
 
@@ -401,6 +417,8 @@ function nextVideo() {
   } else if (!isLoading) {
     fetchVideos();
   }
+
+  updateNavigationButtons();
 }
 
 function previousVideo() {
@@ -408,6 +426,8 @@ function previousVideo() {
     currentIndex--;
     loadVideo(videoQueue[currentIndex], 'prev');
   }
+
+  updateNavigationButtons();
 }
 
 // ============================================

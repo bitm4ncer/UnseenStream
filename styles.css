@@ -11,6 +11,7 @@ body {
   background: #000;
   color: white;
   touch-action: pan-y;
+  overscroll-behavior-y: none;
 }
 
 /* Video Container */
@@ -23,6 +24,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: height 0.3s ease;
+  overscroll-behavior: none;
 }
 
 body.controls-visible #video-container {
@@ -608,4 +610,74 @@ body.controls-visible #fade-btn {
 
 .nav-btn:active {
   transform: scale(0.95);
+}
+
+.nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  /* Reduce control section height on mobile */
+  #controls {
+    height: auto;
+    padding: 12px 16px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 12px;
+  }
+
+  /* Adjust video container height for smaller controls */
+  body.controls-visible #video-container {
+    height: calc(100vh - 140px); /* Approximate height for mobile controls */
+  }
+
+  /* Reorder grid: Nav buttons first, then video info, then action buttons */
+  .nav-buttons {
+    order: 1;
+    justify-content: center;
+    width: 100%;
+  }
+
+  #video-info {
+    order: 2;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .action-buttons {
+    order: 3;
+    justify-content: center;
+    width: 100%;
+  }
+
+  /* Hide fade/toggle button on mobile - controls always visible */
+  #fade-btn {
+    display: none;
+  }
+
+  /* Prevent controls from being hidden on mobile */
+  #controls.hidden {
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Adjust button sizes for mobile */
+  .nav-btn {
+    min-width: 70px;
+    height: 40px;
+    font-size: 14px;
+    padding: 0 20px;
+  }
+
+  #video-title {
+    font-size: 14px;
+  }
+
+  #video-stats {
+    font-size: 11px;
+  }
 }
