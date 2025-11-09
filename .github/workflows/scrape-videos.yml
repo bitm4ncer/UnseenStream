@@ -29,6 +29,12 @@ jobs:
         run: |
           pip install -r scripts/requirements.txt
 
+      - name: Test API key (diagnostic)
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          python test_api_key.py
+
       - name: Run video discovery script
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
