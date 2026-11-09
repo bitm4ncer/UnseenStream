@@ -36,3 +36,10 @@ tmp/
 .claude/
 *.pyc
 __pycache__/
+
+# Runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+.venv/

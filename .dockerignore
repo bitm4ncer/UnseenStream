@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+data
+docs
+tests
+__pycache__
+*.pyc
+*.md
+videos_pool.json
+test_*.py
+render.yaml

@@ -1,0 +1,99 @@
+services:
+  us-api:
+    build: .
+    image: unseenstream:1.0.0
+    container_name: us-api
+    restart: unless-stopped
+    command:
+      - gunicorn
+      - -b
+      - 0.0.0.0:8000
+      - -w
+      - "1"
+      - --threads
+      - "4"
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+      - --log-level
+      - warning
+      - app.api:app
+    env_file: .env
+    environment:
+      US_DB_PATH: /data/unseenstream.db
+    volumes:
+      - ./data:/data
+    networks:
+      - web
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  us-poller:
+    build: .
+    image: unseenstream:1.0.0
+    container_name: us-poller
+    restart: unless-stopped
+    command: ["python", "-m", "app.cli", "poller"]
+    env_file: .env
+    environment:
+      US_DB_PATH: /data/unseenstream.db
+    volumes:
+      - ./data:/data
+    networks:
+      - web
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  us-discoverer:
+    build: .
+    image: unseenstream:1.0.0
+    container_name: us-discoverer
+    restart: unless-stopped
+    command: ["python", "-m", "app.cli", "discoverer"]
+    env_file: .env
+    environment:
+      US_DB_PATH: /data/unseenstream.db
+    volumes:
+      - ./data:/data
+    networks:
+      - web
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  web:
+    external: true

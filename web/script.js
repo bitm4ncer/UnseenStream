@@ -2,8 +2,8 @@
 // Configuration & State
 // ============================================
 
-// Render.com API Configuration
-const RENDER_API_URL = localStorage.getItem('render_api_url') || 'https://unseenstream.onrender.com';
+// Gleiche Origin: Frontend und API laufen hinter demselben Caddy.
+const API_BASE = '';
 
 // State
 let player;
@@ -17,7 +17,6 @@ let touchEndX = 0;
 let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
-let isColdStarting = false;
 
 // Viewed videos tracking (to prevent duplicates)
 let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
@@ -26,124 +25,26 @@ let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '
 let controlsVisible = true;
 
 // ============================================
-// Cold Start Detection & UI
+// API Integration
 // ============================================
 
-async function checkServerStatus() {
-  if (!RENDER_API_URL) {
-    return { status: 'no_url', message: 'No API URL configured' };
-  }
-
+async function fetchNextVideo() {
   try {
-    console.log('Checking server status...');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-    const response = await fetch(`${RENDER_API_URL}/health`, {
-      method: 'GET',
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    if (response.ok) {
-      return { status: 'ready', message: 'Server is ready' };
-    } else {
-      return { status: 'cold_start', message: 'Server is waking up' };
-    }
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      return { status: 'cold_start', message: 'Server is starting (timeout)' };
-    }
-    return { status: 'cold_start', message: 'Server needs to wake up' };
-  }
-}
-
-function showColdStartUI(remainingSeconds) {
-  const loadingEl = document.getElementById('loading');
-  loadingEl.classList.remove('hidden');
-  loadingEl.innerHTML = `
-    <div style="text-align: center;">
-      <div style="font-size: 1.2em; margin-bottom: 10px;">Server is waking up...</div>
-      <div style="font-size: 2em; font-weight: bold; margin: 20px 0;">${remainingSeconds}s</div>
-      <div style="width: 80%; max-width: 300px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: 0 auto; overflow: hidden;">
-        <div id="progress-bar" style="height: 100%; background: #4CAF50; border-radius: 2px; transition: width 1s linear;"></div>
-      </div>
-    </div>
-  `;
-}
-
-async function waitForColdStart() {
-  const MAX_WAIT_TIME = 90; // 90 seconds max wait
-  const CHECK_INTERVAL = 2; // Check every 2 seconds
-  let elapsed = 0;
-
-  isColdStarting = true;
-
-  while (elapsed < MAX_WAIT_TIME) {
-    const remaining = MAX_WAIT_TIME - elapsed;
-    showColdStartUI(remaining);
-
-    // Update progress bar
-    const progressBar = document.getElementById('progress-bar');
-    if (progressBar) {
-      const progress = (elapsed / MAX_WAIT_TIME) * 100;
-      progressBar.style.width = `${progress}%`;
-    }
-
-    // Check server status
-    const status = await checkServerStatus();
-    if (status.status === 'ready') {
-      console.log('Server is ready!');
-      isColdStarting = false;
-      return true;
-    }
-
-    // Wait before next check
-    await new Promise(resolve => setTimeout(resolve, CHECK_INTERVAL * 1000));
-    elapsed += CHECK_INTERVAL;
-  }
-
-  isColdStarting = false;
-  return false; // Timeout
-}
-
-// ============================================
-// Render.com API Integration
-// ============================================
-
-async function fetchFromRenderAPI() {
-  if (!RENDER_API_URL) {
-    console.log('Render API URL not configured');
-    return null;
-  }
-
-  try {
-    console.log('Fetching from Render API...');
-
-    // Prepare request with excluded video IDs
     const excludedIds = Array.from(viewedVideos);
-    const requestOptions = {
+
+    const response = await fetch(`${API_BASE}/current-video`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        excluded_ids: excludedIds
-      }),
-      signal: AbortSignal.timeout(5000) // 5 second timeout
-    };
-
-    console.log(`Excluding ${excludedIds.length} already viewed videos`);
-
-    const response = await fetch(`${RENDER_API_URL}/current-video`, requestOptions);
+      body: JSON.stringify({ excluded_ids: excludedIds }),
+      signal: AbortSignal.timeout(8000),
+    });
 
     if (response.status === 503) {
-      // Service not ready (pool loading)
-      const data = await response.json();
-      console.warn('Server pool loading:', data.message);
-      return { status: 503, message: data.message };
+      const data = await response.json().catch(() => ({}));
+      return { status: 503, message: data.message || 'Pool wird gefüllt' };
     }
 
     if (!response.ok) {
@@ -152,47 +53,22 @@ async function fetchFromRenderAPI() {
 
     const video = await response.json();
 
-    if (video.error) {
-      console.warn('Render API returned error:', video.message);
-      return null;
-    }
-
-    console.log('✓ Got video from Render API:', video.title, `(${video.viewCount} views)`);
-
-    // Convert to format expected by loadVideo
-    // Note: Video will be marked as viewed when actually loaded in loadVideo()
     return {
       id: { videoId: video.id },
       snippet: {
         title: video.title,
         channelTitle: video.channelTitle,
         thumbnails: {
-          medium: { url: video.thumbnail }
-        }
+          medium: { url: video.thumbnail },
+        },
       },
       statistics: {
-        viewCount: video.viewCount.toString()
-      }
+        viewCount: String(video.viewCount ?? 0),
+      },
     };
-
   } catch (error) {
-    console.warn('Render API fetch failed:', error.message);
+    console.warn('Video-Abruf fehlgeschlagen:', error.message);
     return null;
-  }
-}
-
-async function checkRenderAPIHealth() {
-  if (!RENDER_API_URL) return false;
-
-  try {
-    const response = await fetch(`${RENDER_API_URL}/health`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(3000)
-    });
-    return response.ok;
-  } catch (error) {
-    console.warn('Render API health check failed:', error.message);
-    return false;
   }
 }
 
@@ -213,7 +89,8 @@ function onYouTubeIframeAPIReady() {
     },
     events: {
       'onReady': onPlayerReady,
-      'onStateChange': onPlayerStateChange
+      'onStateChange': onPlayerStateChange,
+      'onError': onPlayerError
     }
   });
 
@@ -258,6 +135,12 @@ function onPlayerStateChange(event) {
   }
 }
 
+function onPlayerError(event) {
+  // 101/150: Embedding nicht erlaubt, 2/5/100: Video weg oder kaputt.
+  console.warn(`Video nicht abspielbar (Code ${event.data}), weiter zum naechsten`);
+  setTimeout(() => nextVideo(), 300);
+}
+
 function preloadNextVideo() {
   const nextIndex = currentIndex + 1;
 
@@ -281,54 +164,41 @@ function preloadNextVideo() {
 // ============================================
 
 async function fetchVideos() {
-  if (isLoading || isColdStarting) return;
-
-  if (!RENDER_API_URL) {
-    const loadingEl = document.getElementById('loading');
-    loadingEl.classList.remove('hidden');
-    loadingEl.textContent = 'No API URL configured. Please set Render API URL in settings.';
-    loadingEl.style.color = '#ff4444';
-    return;
-  }
+  if (isLoading) return;
 
   isLoading = true;
   const loadingEl = document.getElementById('loading');
   loadingEl.classList.remove('hidden');
   loadingEl.textContent = 'Loading videos...';
+  loadingEl.style.color = 'rgba(255, 255, 255, 0.7)';
 
   try {
-    const renderVideo = await fetchFromRenderAPI();
+    const video = await fetchNextVideo();
 
-    // Handle 503 (pool loading)
-    if (renderVideo && renderVideo.status === 503) {
-      loadingEl.textContent = 'Server is loading video pool... Retrying in 3 seconds';
-      loadingEl.style.color = 'rgba(255, 255, 255, 0.7)';
-      isLoading = false;
-
-      // Retry after 3 seconds
+    if (video && video.status === 503) {
+      loadingEl.textContent = 'Der Pool füllt sich gerade … neuer Versuch in 3 Sekunden';
       setTimeout(() => fetchVideos(), 3000);
       return;
     }
 
-    if (renderVideo) {
-      videoQueue.push(renderVideo);
+    if (video) {
+      videoQueue.push(video);
       if (!currentVideo && videoQueue.length > 0) {
         loadVideo(videoQueue[0]);
       }
       updateNavigationButtons();
       loadingEl.classList.add('hidden');
     } else {
-      // API failed, show error
-      loadingEl.textContent = 'Failed to fetch video from server. Please try again.';
+      loadingEl.textContent = 'Video konnte nicht geladen werden. Nochmal versuchen?';
       loadingEl.style.color = '#ff4444';
     }
   } catch (error) {
     console.error('Error fetching videos:', error);
     loadingEl.textContent = `Error: ${error.message}`;
     loadingEl.style.color = '#ff4444';
+  } finally {
+    isLoading = false;
   }
-
-  isLoading = false;
 }
 
 function loadVideo(video, direction = 'next') {
@@ -628,6 +498,7 @@ function updatePlayPauseButton() {
 
   const state = player.getPlayerState();
   const playPauseBtn = document.getElementById('play-pause-btn');
+  if (!playPauseBtn) return;
 
   if (state === YT.PlayerState.PLAYING) {
     playPauseBtn.classList.add('playing');
@@ -733,40 +604,10 @@ function checkFirstVisit() {
 window.addEventListener('load', async () => {
   const loadingEl = document.getElementById('loading');
   loadingEl.classList.remove('hidden');
+  loadingEl.textContent = 'Loading videos...';
 
   // Check for first visit
   checkFirstVisit();
 
-  if (!RENDER_API_URL) {
-    loadingEl.textContent = 'No API URL configured. Please set Render API URL in settings.';
-    loadingEl.style.color = '#ff4444';
-    return;
-  }
-
-  loadingEl.textContent = 'Checking server status...';
-
-  // Check if server is ready or needs cold start
-  const status = await checkServerStatus();
-
-  if (status.status === 'ready') {
-    // Server is ready, fetch videos immediately
-    console.log('Server is ready, fetching videos...');
-    loadingEl.textContent = 'Loading videos...';
-    await fetchVideos();
-  } else if (status.status === 'cold_start') {
-    // Server needs to wake up
-    console.log('Server is cold starting...');
-    const success = await waitForColdStart();
-
-    if (success) {
-      loadingEl.textContent = 'Loading videos...';
-      await fetchVideos();
-    } else {
-      loadingEl.textContent = 'Server startup timeout. Please refresh the page.';
-      loadingEl.style.color = '#ff4444';
-    }
-  } else {
-    loadingEl.textContent = status.message;
-    loadingEl.style.color = '#ff4444';
-  }
+  await fetchVideos();
 });
