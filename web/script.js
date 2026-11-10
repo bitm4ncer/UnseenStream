@@ -176,8 +176,9 @@ async function fetchVideos() {
     const video = await fetchNextVideo();
 
     if (video && video.status === 503) {
-      loadingEl.textContent = 'Der Pool füllt sich gerade … neuer Versuch in 3 Sekunden';
-      setTimeout(() => fetchVideos(), 3000);
+      loadingEl.textContent =
+        'Noch keine Videos im Pool – der Sammler läuft gerade an.';
+      setTimeout(() => fetchVideos(), 5000);
       return;
     }
 
@@ -217,6 +218,7 @@ function loadVideo(video, direction = 'next') {
 
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
+    playerElement.style.visibility = 'visible';
     try {
       player.loadVideoById(videoId);
     } catch (error) {
