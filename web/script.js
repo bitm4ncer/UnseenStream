@@ -1204,6 +1204,34 @@ function updateSourceButtons() {
   });
 }
 
+// Quellen, die der Server gar nicht bedient (z. B. Dailymotion ohne Player-ID),
+// werden ausgeblendet statt einen leeren Feed anzubieten.
+async function syncAvailableSources() {
+  try {
+    const response = await fetch('/sources', { cache: 'no-store' });
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const available = new Set(data.providers || SOURCES);
+
+    document.querySelectorAll('#source-toggle .source-btn').forEach((button) => {
+      const source = button.dataset.source;
+      const usable = available.has(source);
+      button.hidden = !usable;
+      if (!usable) enabledSources.delete(source);
+    });
+
+    if (enabledSources.size === 0) {
+      available.forEach((source) => enabledSources.add(source));
+    }
+
+    localStorage.setItem('enabled_sources', JSON.stringify([...enabledSources]));
+    updateSourceButtons();
+  } catch (error) {
+    /* Quelle bleibt sichtbar, wenn die Abfrage scheitert. */
+  }
+}
+
 function resetFeed() {
   videoQueue = [];
   currentIndex = 0;
@@ -1471,6 +1499,7 @@ window.addEventListener('load', async () => {
 
   updateSourceButtons();
   updateSortButtons();
+  await syncAvailableSources();
 
   // Check for first visit
   checkFirstVisit();

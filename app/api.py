@@ -239,6 +239,15 @@ def health():
     )
 
 
+@app.get("/sources")
+def sources():
+    """Welche Quellen sind konfiguriert und damit im Footer sinnvoll?"""
+    providers = ["youtube", "archive"]
+    if config.DAILYMOTION_ENABLED and config.DAILYMOTION_PLAYER:
+        providers.append("dailymotion")
+    return jsonify({"providers": providers})
+
+
 @app.get("/unseen-count")
 def unseen_count():
     # Kostenlos: die Laenge des In-Memory-Pools, kein DB-Query solange der

@@ -451,6 +451,10 @@ body.embed-mode #timeline {
   background: var(--surface-1);
 }
 
+.source-btn[hidden] {
+  display: none;
+}
+
 .source-btn {
   position: relative;
   width: 30px;
