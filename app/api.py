@@ -85,7 +85,7 @@ class CandidatePool:
         self,
         excluded: set[str] | None = None,
         source: str | None = None,
-        exclude_channels: set[str] | None = None,
+        exclude_channels: list[str] | None = None,
     ) -> dict | None:
         self.refresh()
 
@@ -115,13 +115,26 @@ class CandidatePool:
                     pairs = remaining
 
             if exclude_channels:
+                # Reihenfolge zaehlt: vorne stehen die zuletzt gesehenen.
+                blocked = set(exclude_channels)
                 remaining = [
                     (item, weight)
                     for item, weight in pairs
-                    if item["channel_key"] not in exclude_channels
+                    if item["channel_key"] not in blocked
                 ]
                 if remaining:
                     pairs = remaining
+                elif len(exclude_channels) > 10:
+                    # Pool zu klein fuer die volle Sperre: nur die letzten
+                    # zehn Uploader ausnehmen, statt alles freizugeben.
+                    blocked = set(exclude_channels[:10])
+                    remaining = [
+                        (item, weight)
+                        for item, weight in pairs
+                        if item["channel_key"] not in blocked
+                    ]
+                    if remaining:
+                        pairs = remaining
 
             if not pairs:
                 return None
@@ -180,12 +193,12 @@ def unseen_count():
 @app.route("/current-video", methods=["GET", "POST"])
 def current_video():
     excluded: set[str] = set()
-    exclude_channels: set[str] = set()
+    exclude_channels: list[str] = []
     source = "all"
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         excluded = set(payload.get("excluded_ids") or [])
-        exclude_channels = set(payload.get("exclude_channels") or [])
+        exclude_channels = list(payload.get("exclude_channels") or [])
         source = payload.get("source") or "all"
 
     video = pool.pick(excluded, source, exclude_channels)

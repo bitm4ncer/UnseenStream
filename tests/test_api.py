@@ -228,6 +228,21 @@ def test_unseen_count_is_not_cached(connection):
     assert response.headers["Cache-Control"] == "no-store"
 
 
+def test_exclude_channels_falls_back_to_recent_ten(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0, channel_id="UCa")
+
+    client = api.app.test_client()
+    payload = client.post(
+        "/current-video",
+        # UCa steht ganz hinten: die volle Sperre wuerde alles blocken, die
+        # Zehner-Regel laesst UCa wieder zu.
+        json={"exclude_channels": [f"UC{i}" for i in range(20)] + ["UCa"]},
+    ).get_json()
+
+    assert payload["id"] == "a"
+
+
 def test_response_includes_provider(connection):
     _reset_pool()
     _insert_video(connection, "ar", 0, provider="archive")

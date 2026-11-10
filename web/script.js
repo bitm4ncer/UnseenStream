@@ -25,7 +25,7 @@ let currentProvider = 'youtube';
 
 // Zuletzt gesehene Uploader: verhindert, dass kurz hintereinander mehrere
 // Videos derselben Quelle auftauchen.
-const CHANNEL_COOLDOWN = 5;
+const CHANNEL_COOLDOWN = 50;
 let recentChannels = JSON.parse(
   localStorage.getItem('recent_channels') || '[]'
 );
