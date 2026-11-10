@@ -21,10 +21,38 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 app.logger.setLevel(logging.INFO)
 
+_NO_CACHE_TYPES = {
+    "text/html",
+    "text/css",
+    "application/javascript",
+    "text/javascript",
+    "application/manifest+json",
+}
+
+
+@app.after_request
+def _revalidate_assets(response):
+    """HTML/JS/CSS immer revalidieren, sonst haengt Handys eine alte Version."""
+    if response.mimetype in _NO_CACHE_TYPES:
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 _started_at = time.time()
 
 
 AGE_WEIGHT_CAP = 1825.0
+
+PROVIDERS = ("youtube", "archive", "dailymotion")
+
+
+def parse_sources(value: str | None) -> set[str] | None:
+    """``all``/leer -> None, sonst die gueltigen Provider aus einer CSV-Liste."""
+    if not value or value == "all":
+        return None
+
+    wanted = {part.strip() for part in str(value).split(",")}
+    wanted &= set(PROVIDERS)
+    return wanted or None
 
 
 def age_weight(published_at: str, now) -> float:
@@ -70,7 +98,8 @@ class CandidatePool:
                 "SELECT id, title, channel_id, channel_title, thumbnail, views, "
                 "published_at, provider, media_url "
                 "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0 "
-                "AND (provider != 'archive' OR media_url IS NOT NULL)"
+                "AND (provider NOT IN ('archive', 'dailymotion') "
+                "OR media_url IS NOT NULL)"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
 
@@ -104,8 +133,9 @@ class CandidatePool:
 
     def size(self, source: str | None = None) -> int:
         self.refresh()
-        if source in ("youtube", "archive"):
-            return sum(1 for item in self._items if item["provider"] == source)
+        wanted = parse_sources(source)
+        if wanted:
+            return sum(1 for item in self._items if item["provider"] in wanted)
         return len(self._items)
 
     def pick(
@@ -125,13 +155,13 @@ class CandidatePool:
                 return None
 
             pairs = list(zip(items, sort_weights(self._weights, sort)))
-            wanted = source if source in ("youtube", "archive") else None
+            wanted = parse_sources(source)
 
             if wanted:
                 pairs = [
                     (item, weight)
                     for item, weight in pairs
-                    if item["provider"] == wanted
+                    if item["provider"] in wanted
                 ]
             if excluded:
                 remaining = [
@@ -215,7 +245,7 @@ def unseen_count():
     # Cache frisch ist (20 s TTL). Sinkt sofort beim Ausliefern.
     source = request.args.get("source")
     response = jsonify(
-        {"count": pool.size(source if source in ("youtube", "archive") else None)}
+        {"count": pool.size(source)}
     )
     response.headers["Cache-Control"] = "no-store"
     return response

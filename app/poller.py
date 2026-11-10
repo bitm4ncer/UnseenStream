@@ -334,6 +334,25 @@ def _archive_forever() -> None:
         time.sleep(config.ARCHIVE_INTERVAL)
 
 
+def _dailymotion_forever() -> None:
+    """Dailymotion-Kandidaten nachziehen (kein API-Key, kein Quota)."""
+    from . import dailymotion
+
+    conn = db.connect()
+    cycles = 0
+    while True:
+        try:
+            dailymotion.discover(conn)
+            # Nicht jeden Lauf 100 Videos pruefen: Dailymotion hat kein
+            # Key-Quota, aber unhoefliches Dauerfeuer wird trotzdem gedrosselt.
+            if cycles % 4 == 0:
+                dailymotion.verify(conn, limit=50)
+        except Exception:  # pragma: no cover - nur Logging
+            logger.exception("Dailymotion-Discovery fehlgeschlagen")
+        cycles += 1
+        time.sleep(config.DAILYMOTION_INTERVAL)
+
+
 def _thumb_forever() -> None:
     """Platzhalter-Vorschaubilder durch echte Frames ersetzen."""
     from . import archive
@@ -362,6 +381,14 @@ def run(once: bool = False, dry_run: bool = False) -> None:
     if config.ARCHIVE_ENABLED:
         threading.Thread(target=_archive_forever, daemon=True).start()
         threading.Thread(target=_thumb_forever, daemon=True).start()
+    if config.DAILYMOTION_ENABLED:
+        if config.DAILYMOTION_PLAYER:
+            threading.Thread(target=_dailymotion_forever, daemon=True).start()
+        else:
+            logger.warning(
+                "US_DAILYMOTION_PLAYER fehlt - Dailymotion bleibt aus "
+                "(Embeds brauchen eine Player-ID aus dem Dailymotion Studio)"
+            )
 
     last_prune = 0.0
     while True:

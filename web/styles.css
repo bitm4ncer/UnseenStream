@@ -77,10 +77,28 @@ button:focus-visible {
   z-index: 2;
 }
 
+#embed-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+  display: none;
+  z-index: 2;
+}
+
 body.archive-mode #native-player {
   display: block;
 }
 body.archive-mode #player {
+  display: none;
+}
+
+body.embed-mode #embed-player {
+  display: block;
+}
+body.embed-mode #player {
   display: none;
 }
 
@@ -138,22 +156,26 @@ body.archive-mode #player {
 }
 
 #player.slide-out-up,
-#native-player.slide-out-up {
+#native-player.slide-out-up,
+#embed-player.slide-out-up {
   animation: slideOutUp 0.28s ease forwards;
 }
 
 #player.slide-in-up,
-#native-player.slide-in-up {
+#native-player.slide-in-up,
+#embed-player.slide-in-up {
   animation: slideInUp 0.28s ease forwards;
 }
 
 #player.slide-out-down,
-#native-player.slide-out-down {
+#native-player.slide-out-down,
+#embed-player.slide-out-down {
   animation: slideOutDown 0.28s ease forwards;
 }
 
 #player.slide-in-down,
-#native-player.slide-in-down {
+#native-player.slide-in-down,
+#embed-player.slide-in-down {
   animation: slideInDown 0.28s ease forwards;
 }
 
@@ -326,6 +348,13 @@ body:not(.controls-visible) #overlay {
   cursor: pointer;
   touch-action: none;
   z-index: 1;
+}
+
+/* Dailymotion-Embeds liefern keine Fortschrittsdaten an die Seite. */
+body.embed-mode #timeline {
+  opacity: 0.35;
+  pointer-events: none;
+  cursor: default;
 }
 
 #timeline-track {

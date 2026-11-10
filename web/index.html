@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>Unseen Stream</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
@@ -13,7 +14,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Unseen">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
   <script defer src="https://stats.bitmancer.net/script.js" data-website-id="a2b036d4-8db1-4ea5-b44c-27923f4befa3"></script>
 </head>
 <body class="controls-visible">
@@ -22,6 +23,7 @@
     <div id="loading">Suchen…</div>
     <div id="player" style="visibility: hidden;"></div>
     <video id="native-player" playsinline preload="metadata"></video>
+    <iframe id="embed-player" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title="Video"></iframe>
     <div id="swipe-layer" aria-hidden="true"></div>
 
     <div id="overlay">
@@ -69,6 +71,9 @@
             </button>
             <button type="button" class="source-btn active" data-source="archive" data-tooltip="archive.org" aria-label="archive.org" aria-pressed="true">
               <img src="/icons/archive.svg" alt="" width="16" height="16">
+            </button>
+            <button type="button" class="source-btn active" data-source="dailymotion" data-tooltip="Dailymotion" aria-label="Dailymotion" aria-pressed="true">
+              <img src="/icons/dailymotion.svg" alt="" width="16" height="16">
             </button>
           </div>
 
@@ -130,6 +135,6 @@
   </div>
 
   <script src="https://www.youtube.com/iframe_api"></script>
-  <script src="script.js"></script>
+  <script src="script.js?v=3"></script>
 </body>
 </html>

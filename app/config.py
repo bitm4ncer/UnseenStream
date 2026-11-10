@@ -102,3 +102,19 @@ ARCHIVE_DEEP_LIMIT = _int("US_ARCHIVE_DEEP_LIMIT", 100)
 ARCHIVE_VINTAGE_START = _int("US_ARCHIVE_VINTAGE_START", 2025)
 ARCHIVE_VINTAGE_END = _int("US_ARCHIVE_VINTAGE_END", 2015)
 ARCHIVE_VINTAGE_LIMIT = _int("US_ARCHIVE_VINTAGE_LIMIT", 100)
+
+# Dailymotion als dritte Quelle (views_total ist direkt filterbar).
+DAILYMOTION_ENABLED = os.environ.get("US_DAILYMOTION_ENABLED", "1") not in (
+    "0",
+    "false",
+    "False",
+)
+# Player-ID aus dem Dailymotion Studio (Embeds > Players). Ohne sie blockt
+# Dailymotion jedes Embed auf fremden Domains mit 403.
+DAILYMOTION_PLAYER = os.environ.get("US_DAILYMOTION_PLAYER", "").strip()
+DAILYMOTION_LIMIT = _int("US_DAILYMOTION_LIMIT", 300)
+DAILYMOTION_INTERVAL = _int("US_DAILYMOTION_INTERVAL", 900)
+DAILYMOTION_DELAY = _float("US_DAILYMOTION_DELAY", 0.3)
+DAILYMOTION_FRESH_HOURS = _int("US_DAILYMOTION_FRESH_HOURS", 48)
+# Lange Reuploads (Komplettfilme) aussperren, kurze Clips ohnehin.
+DAILYMOTION_MAX_DURATION_S = _int("US_DAILYMOTION_MAX_DURATION", 2700)

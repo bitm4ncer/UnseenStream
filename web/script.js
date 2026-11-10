@@ -21,8 +21,17 @@ let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
 let currentProvider = 'youtube';
+let dmPlaying = true;
 
-const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+const PROVIDER_LABELS = {
+  youtube: 'YouTube',
+  archive: 'Archive',
+  dailymotion: 'Dailymotion',
+};
+
+const isTouchDevice =
+  window.matchMedia('(pointer: coarse)').matches ||
+  new URLSearchParams(window.location.search).has('touch');
 
 // Zuletzt gesehene Uploader: verhindert, dass kurz hintereinander mehrere
 // Videos derselben Quelle auftauchen.
@@ -178,7 +187,9 @@ function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
       rel: 0,
       playsinline: 1,
       cc_load_policy: 0,
-      iv_load_policy: 3
+      iv_load_policy: 3,
+      disablekb: 1,
+      fs: 0
     },
     events: {
       'onReady': onPlayerReady,
@@ -343,6 +354,12 @@ function preloadUpcoming() {
       continue;
     }
 
+    if (video.provider === 'dailymotion') {
+      // iframe-Embeds lassen sich nicht vorladen.
+      clearPreloadSlot(slot);
+      continue;
+    }
+
     const id = video.id.videoId;
     if (slot.currentId === id) continue;
 
@@ -381,6 +398,8 @@ async function fetchVideos() {
   loadingEl.textContent = 'Loading videos...';
   loadingEl.style.color = 'rgba(255, 255, 255, 0.7)';
 
+  let poolMessage = null;
+
   try {
     // Auffuellen bis drei Videos voraus gepuffert sind. Jeder Abruf
     // verbraucht serverseitig ein Video, deshalb genau die Tiefe, die
@@ -388,6 +407,13 @@ async function fetchVideos() {
     while (videoQueue.length - currentIndex - 1 < PRELOAD_AHEAD) {
       const video = await fetchNextVideo();
       if (!video) break;
+
+      if (video.status === 503) {
+        // Kein Kandidat mehr: das ist kein Video-Objekt, sonst kracht
+        // loadVideo() beim Zugriff auf video.id.
+        poolMessage = video.message;
+        break;
+      }
 
       videoQueue.push(video);
       rememberChannel(video);
@@ -406,6 +432,7 @@ async function fetchVideos() {
       loadingEl.classList.add('hidden');
     } else {
       loadingEl.textContent =
+        poolMessage ||
         'Noch keine Videos im Pool – der Sammler läuft gerade an.';
     }
   } catch (error) {
@@ -430,14 +457,61 @@ function rememberChannel(video) {
   localStorage.setItem('recent_channels', JSON.stringify(recentChannels));
 }
 
+function dmEmbedSrc(mediaUrl) {
+  if (!mediaUrl) return '';
+  const sep = mediaUrl.includes('?') ? '&' : '?';
+  return `${mediaUrl}${sep}autoplay=1&mute=0&queue-enable=false&controls=1`;
+}
+
+function dmCommand(command) {
+  const frame = document.getElementById('embed-player');
+  if (!frame || !frame.contentWindow) return;
+  try {
+    frame.contentWindow.postMessage(
+      JSON.stringify({ command, parameters: [] }),
+      '*'
+    );
+  } catch (error) {
+    console.warn('Dailymotion-Befehl fehlgeschlagen:', error);
+  }
+}
+
+// Dailymotion schickt play/pause/end als postMessage. Daraus leiten wir
+// Button-Zustand und Autoplay ab.
+window.addEventListener('message', (event) => {
+  if (!/^https:\/\/([a-z0-9-]+\.)*dailymotion\.com$/.test(event.origin)) return;
+
+  let data = event.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch (error) {
+      return;
+    }
+  }
+  if (!data || typeof data !== 'object') return;
+
+  if (data.event === 'play' || data.event === 'pause') {
+    dmPlaying = data.event === 'play';
+    const btn = document.getElementById('play-pause-btn');
+    if (btn) btn.classList.toggle('playing', dmPlaying);
+  }
+
+  if (data.event === 'end' && isAutoplayEnabled) {
+    nextVideo();
+  }
+});
+
 function loadVideo(video, direction = 'next') {
   if (!video) return;
 
   currentVideo = video;
   const videoId = video.id.videoId;
   const isArchive = video.provider === 'archive';
+  const isEmbed = video.provider === 'dailymotion';
   const playerElement = document.getElementById('player');
   const nativePlayer = document.getElementById('native-player');
+  const embedPlayer = document.getElementById('embed-player');
   currentProvider = video.provider || 'youtube';
   resetTimeline();
 
@@ -457,6 +531,7 @@ function loadVideo(video, direction = 'next') {
 
   // Add slide-out animation
   playerElement.className = slideOutClass;
+  if (embedPlayer) embedPlayer.className = slideOutClass;
 
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
@@ -474,13 +549,42 @@ function loadVideo(video, direction = 'next') {
           console.warn('stopVideo fehlgeschlagen:', error);
         }
       }
+      document.body.classList.remove('embed-mode');
+      if (embedPlayer) embedPlayer.src = 'about:blank';
       document.body.classList.add('archive-mode');
       if (nativePlayer) {
         nativePlayer.src = video.mediaUrl;
         nativePlayer.play().catch(() => {});
       }
+    } else if (isEmbed) {
+      if (!video.mediaUrl) {
+        console.warn('Dailymotion-Video ohne Embed-URL:', videoId);
+        nextVideo();
+        return;
+      }
+      // Der Embed bringt seinen eigenen Ton mit: alles andere hart stoppen.
+      if (player && player.stopVideo) {
+        try {
+          player.stopVideo();
+        } catch (error) {
+          console.warn('stopVideo fehlgeschlagen:', error);
+        }
+      }
+      if (nativePlayer) {
+        nativePlayer.pause();
+        nativePlayer.removeAttribute('src');
+        nativePlayer.load();
+      }
+      document.body.classList.remove('archive-mode');
+      document.body.classList.add('embed-mode');
+      if (embedPlayer) embedPlayer.src = dmEmbedSrc(video.mediaUrl);
+      // Erst der play-Event des Players gilt als "laeuft"; so sendet der
+      // erste Tap nicht versehentlich pause, wenn Autoplay blockiert wurde.
+      dmPlaying = false;
     } else {
       document.body.classList.remove('archive-mode');
+      document.body.classList.remove('embed-mode');
+      if (embedPlayer) embedPlayer.src = 'about:blank';
       if (nativePlayer) {
         nativePlayer.pause();
         nativePlayer.removeAttribute('src');
@@ -514,7 +618,7 @@ function loadVideo(video, direction = 'next') {
 
     const sourceEl = document.getElementById('video-source');
     if (sourceEl) {
-      sourceEl.textContent = isArchive ? 'Archive' : 'YouTube';
+      sourceEl.textContent = PROVIDER_LABELS[currentProvider] || 'YouTube';
     }
 
     // Mark this video as viewed (for cache/deduplication)
@@ -536,10 +640,12 @@ function loadVideo(video, direction = 'next') {
 
     // Add slide-in animation
     playerElement.className = slideInClass;
+    if (embedPlayer) embedPlayer.className = slideInClass;
 
     // Remove animation classes after animation completes
     setTimeout(() => {
       playerElement.className = '';
+      if (embedPlayer) embedPlayer.className = '';
     }, 400);
   }, 400);
 }
@@ -882,6 +988,19 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function togglePlayPause(trigger = 'button') {
+  if (currentProvider === 'dailymotion') {
+    dmPlaying = !dmPlaying;
+    dmCommand(dmPlaying ? 'play' : 'pause');
+    const dmBtn = document.getElementById('play-pause-btn');
+    if (dmBtn) dmBtn.classList.toggle('playing', dmPlaying);
+    track('play-pause', {
+      trigger,
+      provider: 'dailymotion',
+      playing: dmPlaying,
+    });
+    return;
+  }
+
   if (currentProvider === 'archive') {
     const native = document.getElementById('native-player');
     if (!native || !native.src) return;
@@ -913,7 +1032,7 @@ function togglePlayPause(trigger = 'button') {
 
 // Update play/pause button state when player state changes
 function updatePlayPauseButton() {
-  if (currentProvider === 'archive') return; // steuert der native Player
+  if (currentProvider !== 'youtube') return; // steuern native Player bzw. Embed
   if (!player || !player.getPlayerState) return;
 
   const state = player.getPlayerState();
@@ -981,10 +1100,10 @@ function playVideo(videoId) {
   }
 
   const saved = getSavedVideos().find(v => v.id === videoId);
-  if (saved && saved.provider === 'archive') {
+  if (saved && (saved.provider === 'archive' || saved.provider === 'dailymotion')) {
     loadVideo({
       id: { videoId: saved.id },
-      provider: 'archive',
+      provider: saved.provider,
       mediaUrl: saved.mediaUrl || null,
       snippet: {
         title: saved.title,
@@ -1023,7 +1142,9 @@ function closeWelcome() {
   track('welcome-start');
 
   // Start playing the first video if it's loaded
-  if (player && player.playVideo && currentVideo) {
+  if (currentProvider === 'dailymotion') {
+    dmCommand('play');
+  } else if (player && player.playVideo && currentVideo) {
     player.playVideo();
   }
 }
@@ -1043,10 +1164,10 @@ function checkFirstVisit() {
 }
 
 // ============================================
-// Source Filter (YouTube / archive.org)
+// Source Filter (YouTube / archive.org / Dailymotion)
 // ============================================
 
-const SOURCES = ['youtube', 'archive'];
+const SOURCES = ['youtube', 'archive', 'dailymotion'];
 
 function loadEnabledSources() {
   const stored = localStorage.getItem('enabled_sources');
@@ -1071,7 +1192,8 @@ let enabledSources = loadEnabledSources();
 
 function sourceParam() {
   if (enabledSources.size === SOURCES.length) return 'all';
-  return enabledSources.has('archive') ? 'archive' : 'youtube';
+  // CSV, damit auch "2 von 3 an" abbildbar ist.
+  return SOURCES.filter((source) => enabledSources.has(source)).join(',');
 }
 
 function updateSourceButtons() {
@@ -1091,12 +1213,16 @@ function resetFeed() {
   preloadSlots.forEach(clearPreloadSlot);
 
   document.body.classList.remove('archive-mode');
+  document.body.classList.remove('embed-mode');
   const nativePlayer = document.getElementById('native-player');
   if (nativePlayer) {
     nativePlayer.pause();
     nativePlayer.removeAttribute('src');
     nativePlayer.load();
   }
+  const embedPlayer = document.getElementById('embed-player');
+  if (embedPlayer) embedPlayer.src = 'about:blank';
+  dmPlaying = false;
 
   fetchVideos();
   refreshUnseenCount();
