@@ -18,6 +18,7 @@ let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
 let sourceFilter = localStorage.getItem('source_filter') || 'all';
+let currentProvider = 'youtube';
 
 // Viewed videos tracking (to prevent duplicates)
 let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
@@ -215,6 +216,13 @@ function loadVideo(video, direction = 'next') {
   const isArchive = video.provider === 'archive';
   const playerElement = document.getElementById('player');
   const archivePlayer = document.getElementById('archive-player');
+  currentProvider = video.provider || 'youtube';
+
+  const playPauseBtn = document.getElementById('play-pause-btn');
+  if (playPauseBtn) {
+    playPauseBtn.disabled = isArchive;
+    playPauseBtn.classList.remove('playing');
+  }
 
   // Determine slide direction
   const slideOutClass = direction === 'next' ? 'slide-out-up' : 'slide-out-down';
@@ -226,6 +234,14 @@ function loadVideo(video, direction = 'next') {
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
     if (isArchive) {
+      // YouTube-iframe weiterspielen lassen waere ein Ton-Bug: hart stoppen.
+      if (player && player.stopVideo) {
+        try {
+          player.stopVideo();
+        } catch (error) {
+          console.warn('stopVideo fehlgeschlagen:', error);
+        }
+      }
       document.body.classList.add('archive-mode');
       if (archivePlayer) {
         archivePlayer.src = `https://archive.org/embed/${encodeURIComponent(videoId)}?autoplay=1`;
@@ -498,6 +514,10 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function togglePlayPause() {
+  if (currentProvider === 'archive') {
+    // Der archive.org-iframe gehoert einer anderen Origin - keine Steuerung.
+    return;
+  }
   if (!player || !player.getPlayerState) return;
 
   const state = player.getPlayerState();
@@ -505,10 +525,10 @@ function togglePlayPause() {
 
   if (state === YT.PlayerState.PLAYING) {
     player.pauseVideo();
-    playPauseBtn.classList.remove('playing');
+    if (playPauseBtn) playPauseBtn.classList.remove('playing');
   } else {
     player.playVideo();
-    playPauseBtn.classList.add('playing');
+    if (playPauseBtn) playPauseBtn.classList.add('playing');
   }
 }
 

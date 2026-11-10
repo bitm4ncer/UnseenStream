@@ -35,7 +35,7 @@
     <!-- Center: Navigation Buttons -->
     <div class="nav-buttons">
       <button class="nav-btn" id="prev-btn" onclick="previousVideo()" title="Previous video (← or ↓)">Prev</button>
-      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Toggle autoplay">
+      <button id="play-pause-btn" class="nav-btn" onclick="togglePlayPause()" title="Play/Pause (Space)">
         <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
@@ -54,6 +54,7 @@
         <button type="button" data-source="youtube">YouTube</button>
         <button type="button" data-source="archive">Archive</button>
       </div>
+      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay: nächstes Video automatisch">Auto</button>
       <button id="heart-btn" onclick="toggleSave()" title="Save video">♡</button>
       <button id="library-btn" onclick="openSaved()" title="Saved videos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

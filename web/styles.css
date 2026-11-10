@@ -248,51 +248,28 @@ body.controls-visible #video-container {
   transform: scale(0.9);
 }
 
-/* Autoplay Button (in center with nav buttons) */
+/* Autoplay-Schalter (rechts, als Pille) */
 #autoplay-btn {
-  width: 50px;
-  height: 50px;
-  padding: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+  font: inherit;
+  font-size: 11px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-#autoplay-btn svg {
-  width: 18px;
-  height: 18px;
-  color: white;
-}
-
-#autoplay-btn .play-icon {
-  display: block;
-  padding-left: 2px;
-}
-
-#autoplay-btn .pause-icon {
-  display: none;
-}
-
-#autoplay-btn.active .play-icon {
-  display: none;
-}
-
-#autoplay-btn.active .pause-icon {
-  display: block;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 #autoplay-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
-#autoplay-btn:active {
-  transform: scale(0.9);
+#autoplay-btn.active {
+  background: #fff;
+  color: #000;
 }
 
 /* Fade Controls Button (fixed at bottom right) */
@@ -795,4 +772,15 @@ body.archive-mode #player {
     font-size: 10px;
     padding: 5px 7px;
   }
+}
+
+#play-pause-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+#play-pause-btn:disabled:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
