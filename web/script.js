@@ -53,6 +53,7 @@ async function fetchNextVideo() {
         excluded_ids: excludedIds,
         exclude_channels: recentChannels,
         source: sourceParam(),
+        sort: sortMode,
       }),
       signal: AbortSignal.timeout(8000),
     });
@@ -76,6 +77,7 @@ async function fetchNextVideo() {
       snippet: {
         title: video.title,
         channelTitle: video.channelTitle,
+        publishedAt: video.publishedAt,
         thumbnails: {
           medium: { url: video.thumbnail },
         },
@@ -88,6 +90,60 @@ async function fetchNextVideo() {
     console.warn('Video-Abruf fehlgeschlagen:', error.message);
     return null;
   }
+}
+
+// ============================================
+// Analytics (Umami)
+// ============================================
+
+const pendingEvents = [];
+
+function track(event, data) {
+  try {
+    if (window.umami && typeof window.umami.track === 'function') {
+      window.umami.track(event, data);
+      return;
+    }
+
+    // Umami laedt deferred: fruehe Events kurz puffern.
+    if (pendingEvents.length < 20) {
+      pendingEvents.push([event, data]);
+    }
+  } catch (error) {
+    /* Analytics darf die App niemals brechen. */
+  }
+}
+
+window.addEventListener('load', () => {
+  if (!window.umami || typeof window.umami.track !== 'function') return;
+  pendingEvents.splice(0).forEach(([event, data]) => {
+    try {
+      window.umami.track(event, data);
+    } catch (error) {
+      /* egal */
+    }
+  });
+});
+
+// ============================================
+// Zeit-Helfer
+// ============================================
+
+function formatAge(iso) {
+  const timestamp = Date.parse(iso);
+  if (Number.isNaN(timestamp)) return '';
+
+  const hours = (Date.now() - timestamp) / 36e5;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo ago`;
+
+  return `${Math.round(months / 12)}y ago`;
 }
 
 // ============================================
@@ -383,6 +439,11 @@ function loadVideo(video, direction = 'next') {
   currentProvider = video.provider || 'youtube';
   resetTimeline();
 
+  track('video', {
+    provider: currentProvider,
+    age: formatAge(video.snippet.publishedAt),
+  });
+
   const playPauseBtn = document.getElementById('play-pause-btn');
   if (playPauseBtn) {
     playPauseBtn.classList.remove('playing');
@@ -440,8 +501,14 @@ function loadVideo(video, direction = 'next') {
     const viewCount = parseInt(video.statistics?.viewCount || 0);
 
     document.getElementById('video-title').textContent = title;
-    document.getElementById('video-stats').textContent =
-      `${viewCount.toLocaleString()} views • ${channelName}`;
+
+    const publishedAt = video.snippet.publishedAt;
+    const age = formatAge(publishedAt);
+    const statsEl = document.getElementById('video-stats');
+    statsEl.textContent = age
+      ? `${viewCount.toLocaleString()} views • ${age} • ${channelName}`
+      : `${viewCount.toLocaleString()} views • ${channelName}`;
+    statsEl.title = publishedAt ? new Date(publishedAt).toLocaleString() : '';
 
     const sourceEl = document.getElementById('video-source');
     if (sourceEl) {
@@ -494,7 +561,11 @@ function updateNavigationButtons() {
   }
 }
 
-function nextVideo() {
+function nextVideo(trigger = 'auto') {
+  if (trigger !== 'auto') {
+    track('next', { trigger, provider: currentProvider });
+  }
+
   currentIndex++;
 
   if (currentIndex < videoQueue.length) {
@@ -506,7 +577,11 @@ function nextVideo() {
   updateNavigationButtons();
 }
 
-function previousVideo() {
+function previousVideo(trigger = 'auto') {
+  if (trigger !== 'auto') {
+    track('previous', { trigger, provider: currentProvider });
+  }
+
   if (currentIndex > 0) {
     currentIndex--;
     loadVideo(videoQueue[currentIndex], 'prev');
@@ -549,20 +624,20 @@ function handleSwipe() {
   if (absY > absX && absY > threshold) {
     if (swipeDistanceY > 0) {
       // Swipe up - next video
-      nextVideo();
+      nextVideo('swipe');
     } else {
       // Swipe down - previous video
-      previousVideo();
+      previousVideo('swipe');
     }
   }
   // Horizontal swipe (left/right)
   else if (absX > absY && absX > threshold) {
     if (swipeDistanceX > 0) {
       // Swipe left - next video
-      nextVideo();
+      nextVideo('swipe');
     } else {
       // Swipe right - previous video
-      previousVideo();
+      previousVideo('swipe');
     }
   }
 }
@@ -575,13 +650,13 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
-    nextVideo();
+    nextVideo('keyboard');
   } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
-    previousVideo();
+    previousVideo('keyboard');
   } else if (e.key === ' ') {
-    togglePlayPause();
+    togglePlayPause('keyboard');
   } else if (e.key === 's' || e.key === 'S') {
-    toggleSave();
+    toggleSave('keyboard');
   } else if (e.key === 'h' || e.key === 'H') {
     toggleControls();
   }
@@ -591,12 +666,17 @@ document.addEventListener('keydown', (e) => {
 // Save Functionality
 // ============================================
 
-function toggleSave() {
+function toggleSave(trigger = 'button') {
   if (!currentVideo) return;
 
   const savedVideos = getSavedVideos();
   const videoId = currentVideo.id.videoId;
   const existingIndex = savedVideos.findIndex(v => v.id === videoId);
+
+  track(existingIndex >= 0 ? 'unsave' : 'save', {
+    trigger,
+    provider: currentVideo.provider || 'youtube',
+  });
 
   if (existingIndex >= 0) {
     // Remove from saved
@@ -688,8 +768,10 @@ async function downloadCurrent() {
     link.remove();
 
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    track('download', { provider: 'archive', ok: true });
   } catch (error) {
     console.warn('Download fehlgeschlagen, oeffne Datei direkt:', error);
+    track('download', { provider: 'archive', ok: false });
     window.open(url, '_blank', 'noopener');
   } finally {
     updateDownloadButton();
@@ -708,6 +790,8 @@ function toggleAutoplay() {
   isAutoplayEnabled = !isAutoplayEnabled;
   const autoplayBtn = document.getElementById('autoplay-btn');
   autoplayBtn.classList.toggle('active', isAutoplayEnabled);
+
+  track('autoplay', { enabled: isAutoplayEnabled });
 
   // Save preference to localStorage
   localStorage.setItem('autoplayEnabled', isAutoplayEnabled);
@@ -750,6 +834,8 @@ function toggleControls() {
   controls.classList.toggle('hidden', !controlsVisible);
   fadeBtn.classList.toggle('rotated', !controlsVisible);
   document.body.classList.toggle('controls-visible', controlsVisible);
+
+  track('controls-toggle', { visible: controlsVisible });
 }
 
 // Initialize controls visibility on load
@@ -759,14 +845,16 @@ window.addEventListener('DOMContentLoaded', () => {
   updateNavigationButtons();
 });
 
-function togglePlayPause() {
+function togglePlayPause(trigger = 'button') {
   if (currentProvider === 'archive') {
     const native = document.getElementById('native-player');
     if (!native || !native.src) return;
     if (native.paused) {
       native.play().catch(() => {});
+      track('play-pause', { trigger, provider: 'archive', playing: true });
     } else {
       native.pause();
+      track('play-pause', { trigger, provider: 'archive', playing: false });
     }
     return;
   }
@@ -779,9 +867,11 @@ function togglePlayPause() {
   if (state === YT.PlayerState.PLAYING) {
     player.pauseVideo();
     if (playPauseBtn) playPauseBtn.classList.remove('playing');
+    track('play-pause', { trigger, provider: 'youtube', playing: false });
   } else {
     player.playVideo();
     if (playPauseBtn) playPauseBtn.classList.add('playing');
+    track('play-pause', { trigger, provider: 'youtube', playing: true });
   }
 }
 
@@ -834,14 +924,17 @@ function openSaved() {
   }
 
   document.getElementById('saved-modal').classList.add('show');
+  track('library-open', { saved: savedVideos.length });
 }
 
 function closeSaved() {
   document.getElementById('saved-modal').classList.remove('show');
+  track('library-close');
 }
 
 function playVideo(videoId) {
   closeSaved();
+  track('saved-play');
 
   // Find video in queue or load directly
   const video = videoQueue.find(v => v.id.videoId === videoId);
@@ -890,6 +983,8 @@ function showWelcome() {
 function closeWelcome() {
   document.getElementById('welcome-modal').classList.remove('show');
   localStorage.setItem('hasVisited', 'true');
+
+  track('welcome-start');
 
   // Start playing the first video if it's loaded
   if (player && player.playVideo && currentVideo) {
@@ -951,22 +1046,7 @@ function updateSourceButtons() {
   });
 }
 
-function toggleSource(source) {
-  if (!SOURCES.includes(source)) return;
-
-  if (enabledSources.has(source)) {
-    // Mindestens eine Quelle bleibt aktiv.
-    if (enabledSources.size === 1) return;
-    enabledSources.delete(source);
-  } else {
-    enabledSources.add(source);
-  }
-
-  localStorage.setItem('enabled_sources', JSON.stringify([...enabledSources]));
-  localStorage.removeItem('source_filter');
-  updateSourceButtons();
-
-  // Warteschlange verwerfen, damit der Filter sofort greift.
+function resetFeed() {
   videoQueue = [];
   currentIndex = 0;
   currentVideo = null;
@@ -983,13 +1063,64 @@ function toggleSource(source) {
   }
 
   fetchVideos();
+  refreshUnseenCount();
 }
+
+function toggleSource(source) {
+  if (!SOURCES.includes(source)) return;
+
+  if (enabledSources.has(source)) {
+    // Mindestens eine Quelle bleibt aktiv.
+    if (enabledSources.size === 1) return;
+    enabledSources.delete(source);
+  } else {
+    enabledSources.add(source);
+  }
+
+  localStorage.setItem('enabled_sources', JSON.stringify([...enabledSources]));
+  localStorage.removeItem('source_filter');
+  updateSourceButtons();
+  track('source-toggle', {
+    source,
+    enabled: enabledSources.has(source),
+  });
+  resetFeed();
+}
+
+// ============================================
+// Sort order (oldest / newest first)
+// ============================================
+
+let sortMode = localStorage.getItem('sort_mode') || 'old';
+
+function updateSortButtons() {
+  document.querySelectorAll('#sort-toggle .sort-btn').forEach((button) => {
+    const active = button.dataset.sort === sortMode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function setSort(mode) {
+  if (!['old', 'new'].includes(mode) || mode === sortMode) return;
+
+  sortMode = mode;
+  localStorage.setItem('sort_mode', mode);
+  updateSortButtons();
+  track('sort', { mode });
+  resetFeed();
+}
+
+document.querySelectorAll('#sort-toggle .sort-btn').forEach((button) => {
+  button.addEventListener('click', () => setSort(button.dataset.sort));
+});
 
 document.querySelectorAll('#source-toggle .source-btn').forEach((button) => {
   button.addEventListener('click', () => toggleSource(button.dataset.source));
 });
 
 window.addEventListener('DOMContentLoaded', updateSourceButtons);
+window.addEventListener('DOMContentLoaded', updateSortButtons);
 
 // ============================================
 // Native player (archive.org files)
@@ -997,10 +1128,16 @@ window.addEventListener('DOMContentLoaded', updateSourceButtons);
 
 const nativePlayerEl = document.getElementById('native-player');
 
+let consecutivePlaybackErrors = 0;
+
 if (nativePlayerEl) {
   nativePlayerEl.addEventListener('play', () => {
     const btn = document.getElementById('play-pause-btn');
     if (btn) btn.classList.add('playing');
+  });
+
+  nativePlayerEl.addEventListener('playing', () => {
+    consecutivePlaybackErrors = 0;
   });
 
   nativePlayerEl.addEventListener('pause', () => {
@@ -1014,6 +1151,16 @@ if (nativePlayerEl) {
 
   nativePlayerEl.addEventListener('error', () => {
     if (!nativePlayerEl.currentSrc) return;
+
+    consecutivePlaybackErrors += 1;
+    if (consecutivePlaybackErrors > 3) {
+      // Nicht endlos durch den Pool rattern, wenn der Server kaputte
+      // Dateien liefert.
+      console.warn('Mehrere Archive-Videos fehlgeschlagen, stoppe.');
+      consecutivePlaybackErrors = 0;
+      return;
+    }
+
     console.warn('Archive-Video konnte nicht geladen werden');
     nextVideo();
   });
@@ -1029,7 +1176,9 @@ async function refreshUnseenCount() {
   if (!unseenCountEl) return;
 
   try {
-    const response = await fetch('/unseen-count', { cache: 'no-store' });
+    const source = sourceParam();
+    const query = source === 'all' ? '' : `?source=${encodeURIComponent(source)}`;
+    const response = await fetch(`/unseen-count${query}`, { cache: 'no-store' });
     if (!response.ok) return;
 
     const data = await response.json();
@@ -1159,6 +1308,7 @@ window.addEventListener('load', async () => {
   loadingEl.textContent = 'Loading videos...';
 
   updateSourceButtons();
+  updateSortButtons();
 
   // Check for first visit
   checkFirstVisit();
