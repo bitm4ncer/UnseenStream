@@ -253,13 +253,13 @@ def test_age_weight_prefers_older_videos():
 
 
 def test_sort_weights_inverts_age_preference():
-    weights = [1.0, 31.0, 61.0]
+    weights = [1.0, 900.0, api.AGE_WEIGHT_CAP + 1]
 
     assert api.sort_weights(weights, "old") == weights
     inverted = api.sort_weights(weights, "new")
 
     # Neuestes (kleinstes Gewicht) wird am wahrscheinlichsten.
-    assert inverted[0] == 61.0
+    assert inverted[0] == api.AGE_WEIGHT_CAP + 1
     assert inverted[-1] == 1.0
 
 

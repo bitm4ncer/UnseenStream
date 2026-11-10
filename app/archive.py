@@ -13,7 +13,7 @@ import logging
 import re
 import subprocess
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -287,6 +287,19 @@ def verify_archive(conn, limit: int = 500) -> int:
     return removed
 
 
+def search_vintage(
+    year: int, cursor: str | None = None, limit: int | None = None
+) -> list[dict]:
+    """Ein komplettes Jahr nach 0-Download-Items absuchen."""
+    rows = limit or config.ARCHIVE_VINTAGE_LIMIT
+    start = db.iso(datetime(year, 1, 1, tzinfo=timezone.utc))
+    end = cursor or db.iso(datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc))
+
+    return _search(
+        f"mediatype:movies AND downloads:0 AND addeddate:[{start} TO {end}]", rows
+    )
+
+
 def _channel_title(doc: dict) -> str:
     uploader = doc.get("uploader")
     if uploader:
@@ -409,11 +422,43 @@ def discover(conn, limit: int | None = None) -> dict:
         )
         conn.commit()
 
+    # Ein Jahr pro Lauf komplett nach alten 0-Download-Items absuchen.
+    year = int(
+        db.get_meta(conn, "archive_vintage_year") or config.ARCHIVE_VINTAGE_START
+    )
+    cursor_key = f"archive_vintage_cursor_{year}"
+    vintage = search_vintage(
+        year, db.get_meta(conn, cursor_key), config.ARCHIVE_VINTAGE_LIMIT
+    )
+    vintage_added = 0
+    if vintage:
+        vintage_added, _ = _ingest(conn, vintage, now)
+        oldest = min(
+            (doc.get("addeddate") for doc in vintage if doc.get("addeddate")),
+            default=None,
+        )
+        if oldest:
+            try:
+                next_cursor = db.parse_iso(oldest) - timedelta(seconds=1)
+                db.set_meta(conn, cursor_key, db.iso(next_cursor))
+            except (TypeError, ValueError):
+                pass
+            conn.commit()
+    else:
+        next_year = year - 1
+        if next_year < config.ARCHIVE_VINTAGE_END:
+            next_year = config.ARCHIVE_VINTAGE_START
+        db.set_meta(conn, "archive_vintage_year", str(next_year))
+        conn.commit()
+        logger.info("Archive-Jahr %d abgeschlossen, weiter mit %d", year, next_year)
+
     stats = {
-        "found": len(fresh) + len(deep),
-        "added": added + deep_added,
+        "found": len(fresh) + len(deep) + len(vintage),
+        "added": added + deep_added + vintage_added,
         "refreshed": refreshed + deep_refreshed,
         "deep": len(deep),
+        "vintage": len(vintage),
+        "year": year,
     }
     if stats["added"] or stats["refreshed"]:
         logger.info(

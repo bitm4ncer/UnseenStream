@@ -1,6 +1,7 @@
 """HTTP-API: liefert zufaellige, kaum gesehene Videos aus dem Kandidatenpool."""
 
 import logging
+import mimetypes
 import random
 import threading
 import time
@@ -13,6 +14,8 @@ from . import config, db
 
 logger = logging.getLogger(__name__)
 
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
@@ -21,7 +24,7 @@ app.logger.setLevel(logging.INFO)
 _started_at = time.time()
 
 
-AGE_WEIGHT_CAP = 60.0
+AGE_WEIGHT_CAP = 1825.0
 
 
 def age_weight(published_at: str, now) -> float:

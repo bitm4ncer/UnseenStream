@@ -5,8 +5,12 @@ from app import db, archive
 
 @pytest.fixture(autouse=True)
 def _no_deep_query(monkeypatch):
-    """Standardmaessig kein Deep-Fenster, sonst gehen Tests ins Netz."""
+    """Kein Netz in Tests: alle drei Suchen standardmaessig leer."""
+    monkeypatch.setattr(archive, "search_recent", lambda limit=None: [])
     monkeypatch.setattr(archive, "search_deep", lambda cursor=None, limit=None: [])
+    monkeypatch.setattr(
+        archive, "search_vintage", lambda year, cursor=None, limit=None: []
+    )
 
 
 def _doc(identifier="item1", downloads=0, title="Titel"):
@@ -248,6 +252,13 @@ def test_probe_media_rejects_html_error_page(monkeypatch):
 
     monkeypatch.setattr(archive, "_http", lambda: Session())
     assert archive.probe_media("https://archive.org/download/x/v.mp4") is False
+
+
+def test_vintage_year_advances_when_year_is_empty(connection):
+    archive.discover(connection)
+
+    # 2025 ist leer, also geht es beim naechsten Lauf mit 2024 weiter.
+    assert db.get_meta(connection, "archive_vintage_year") == "2024"
 
 
 def test_channel_title_prefers_uploader():
