@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New full-bleed UI: overlay controls, flat surfaces, no borders, a source
   badge on every video, and a native `<video>` player for archive.org files
   so both providers share the same controls.
+- YouTube captions are always off (`cc_load_policy: 0` plus the captions
+  module is unloaded after load).
+- archive.org items without a real preview image get a frame extracted from
+  the MP4 with ffmpeg and stored as a data URI, instead of the generic
+  placeholder icon.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

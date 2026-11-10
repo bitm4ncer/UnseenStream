@@ -8,8 +8,10 @@ Kein API-Key, kein Tagesquota. Dafuer hoeflich crawlen: sequenziell mit
 kurzer Pause, damit die Non-Profit-Infrastruktur nicht belastet wird.
 """
 
+import base64
 import logging
 import re
+import subprocess
 import time
 from datetime import timedelta
 
@@ -25,6 +27,10 @@ THUMB_URL = "https://archive.org/services/img/{identifier}"
 
 VIDEO_FILE = re.compile(r"\.(mp4|webm|ogv|m4v)$", re.IGNORECASE)
 DOWNLOAD_URL = "https://archive.org/download/{identifier}/{path}"
+
+# archive.org liefert fuer Items ohne echtes Vorschaubild ein generisches
+# PNG mit exakt dieser Groesse. Alles andere ist ein echter Frame.
+PLACEHOLDER_BYTES = 3777
 
 _session: requests.Session | None = None
 
@@ -123,6 +129,95 @@ def fetch_metadata(identifier: str) -> dict | None:
         "size": int(main.get("size") or 0),
         "media_url": DOWNLOAD_URL.format(identifier=identifier, path=path),
     }
+
+
+def thumb_is_placeholder(identifier: str) -> bool:
+    """True, wenn archive.org nur das generische Vorschaubild liefert."""
+    try:
+        response = _http().get(THUMB_URL.format(identifier=identifier), timeout=15)
+    except requests.RequestException:
+        return False
+
+    if response.status_code != 200:
+        return False
+
+    return len(response.content) == PLACEHOLDER_BYTES
+
+
+def extract_frame(media_url: str, position: int = 3) -> str | None:
+    """Erstes brauchbares Bild als data-URI, direkt aus dem MP4."""
+    for seek in (position, 0):
+        command = [
+            "ffmpeg",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-ss",
+            str(seek),
+            "-i",
+            media_url,
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=480:-2",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "mjpeg",
+            "pipe:1",
+        ]
+        try:
+            result = subprocess.run(
+                command, capture_output=True, timeout=45, check=False
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning("ffmpeg fehlgeschlagen: %s", exc)
+            return None
+
+        if result.returncode == 0 and result.stdout:
+            encoded = base64.b64encode(result.stdout).decode("ascii")
+            return f"data:image/jpeg;base64,{encoded}"
+
+    return None
+
+
+def refresh_thumbnails(conn, limit: int = 8) -> int:
+    """Ersetzt Platzhalter-Vorschaubilder durch einen echten Videoframe."""
+    rows = conn.execute(
+        "SELECT id, media_url FROM videos "
+        "WHERE provider = 'archive' AND thumb_checked = 0 "
+        "AND media_url IS NOT NULL "
+        "ORDER BY published_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+    fixed = 0
+    for row in rows:
+        if not thumb_is_placeholder(row["id"]):
+            conn.execute(
+                "UPDATE videos SET thumb_checked = 1 WHERE id = ?", (row["id"],)
+            )
+            conn.commit()
+            continue
+
+        frame = extract_frame(row["media_url"])
+        if frame:
+            conn.execute(
+                "UPDATE videos SET thumbnail = ?, thumb_checked = 1 WHERE id = ?",
+                (frame, row["id"]),
+            )
+            fixed += 1
+        else:
+            # Nicht ewig wiederholen: 2 = aufgegeben.
+            conn.execute(
+                "UPDATE videos SET thumb_checked = 2 WHERE id = ?", (row["id"],)
+            )
+        conn.commit()
+        time.sleep(0.3)
+
+    if fixed:
+        logger.info("%d Vorschaubilder aus Videoframes erzeugt", fixed)
+    return fixed
 
 
 def _channel_title(doc: dict) -> str:

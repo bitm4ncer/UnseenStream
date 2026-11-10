@@ -104,6 +104,87 @@ def test_discover_backfills_media_url(connection, monkeypatch):
     assert row["media_url"].endswith("/v.mp4")
 
 
+class _FakeHttp:
+    def __init__(self, content, status=200):
+        self._content = content
+        self._status = status
+
+    def get(self, url, timeout=15):
+        class Response:
+            def __init__(self, content, status):
+                self.content = content
+                self.status_code = status
+
+        return Response(self._content, self._status)
+
+
+def test_thumb_is_placeholder_detects_generic(monkeypatch):
+    monkeypatch.setattr(archive, "_http", lambda: _FakeHttp(b"x" * archive.PLACEHOLDER_BYTES))
+    assert archive.thumb_is_placeholder("item") is True
+
+
+def test_thumb_is_placeholder_accepts_real_frame(monkeypatch):
+    monkeypatch.setattr(archive, "_http", lambda: _FakeHttp(b"x" * 9000))
+    assert archive.thumb_is_placeholder("item") is False
+
+
+def test_refresh_thumbnails_replaces_placeholder(connection, monkeypatch):
+    connection.execute(
+        """
+        INSERT INTO videos (id, title, thumbnail, views, published_at,
+                            discovered_at, last_seen, source, provider,
+                            duration_s, media_url)
+        VALUES ('thumbme', 'T', 'https://archive.org/services/img/thumbme', 0,
+                '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z',
+                '2026-11-10T00:00:00Z', 'archive', 'archive', 600,
+                'https://archive.org/download/thumbme/v.mp4')
+        """
+    )
+    connection.commit()
+
+    monkeypatch.setattr(archive, "thumb_is_placeholder", lambda ident: True)
+    monkeypatch.setattr(
+        archive, "extract_frame", lambda url, position=3: "data:image/jpeg;base64,AAA"
+    )
+    monkeypatch.setattr(archive.time, "sleep", lambda seconds: None)
+
+    assert archive.refresh_thumbnails(connection) == 1
+
+    row = connection.execute(
+        "SELECT thumbnail, thumb_checked FROM videos WHERE id = 'thumbme'"
+    ).fetchone()
+    assert row["thumbnail"].startswith("data:image/jpeg;base64,")
+    assert row["thumb_checked"] == 1
+
+
+def test_refresh_thumbnails_keeps_real_image(connection, monkeypatch):
+    connection.execute(
+        """
+        INSERT INTO videos (id, title, thumbnail, views, published_at,
+                            discovered_at, last_seen, source, provider,
+                            duration_s, media_url)
+        VALUES ('real', 'T', 'https://archive.org/services/img/real', 0,
+                '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z',
+                '2026-11-10T00:00:00Z', 'archive', 'archive', 600,
+                'https://archive.org/download/real/v.mp4')
+        """
+    )
+    connection.commit()
+
+    monkeypatch.setattr(archive, "thumb_is_placeholder", lambda ident: False)
+    monkeypatch.setattr(
+        archive, "extract_frame", lambda url, position=3: (_ for _ in ()).throw(AssertionError("kein ffmpeg erwartet"))
+    )
+
+    assert archive.refresh_thumbnails(connection) == 0
+
+    row = connection.execute(
+        "SELECT thumbnail, thumb_checked FROM videos WHERE id = 'real'"
+    ).fetchone()
+    assert row["thumbnail"].startswith("https://archive.org/services/img/")
+    assert row["thumb_checked"] == 1
+
+
 def test_channel_title_prefers_uploader():
     assert archive._channel_title({"uploader": "someone", "collection": ["c"]}) == "someone"
     assert archive._channel_title({"collection": ["c"]}) == "c"

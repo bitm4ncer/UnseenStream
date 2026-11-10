@@ -83,8 +83,23 @@ async function fetchNextVideo() {
 // YouTube Player Setup
 // ============================================
 
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player('player', {
+// Untertitel sind bei allen Videos aus: Modul entladen, damit YouTube sie
+// auch bei aktivierten CC nicht wieder einblendet.
+function disableCaptions(target) {
+  if (!target || typeof target.unloadModule !== 'function') return;
+  try {
+    target.unloadModule('captions');
+  } catch (error) {
+    /* Player noch nicht bereit */
+  }
+  try {
+    target.setOption('captions', 'track', {});
+  } catch (error) {
+    /* aeltere Player-Versionen */
+  }
+}
+
+function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
     height: '100%',
     width: '100%',
     playerVars: {
@@ -92,7 +107,9 @@ function onYouTubeIframeAPIReady() {
       controls: 1,
       modestbranding: 1,
       rel: 0,
-      playsinline: 1
+      playsinline: 1,
+      cc_load_policy: 0,
+      iv_load_policy: 3
     },
     events: {
       'onReady': onPlayerReady,
@@ -110,13 +127,15 @@ function onYouTubeIframeAPIReady() {
       controls: 0,
       modestbranding: 1,
       rel: 0,
-      playsinline: 1
+      playsinline: 1,
+      cc_load_policy: 0
     }
   });
 }
 
 function onPlayerReady(event) {
   console.log('Player ready');
+  disableCaptions(event.target);
 
   if (videoQueue.length > 0) {
     loadVideo(videoQueue[0]);
@@ -262,6 +281,7 @@ function loadVideo(video, direction = 'next') {
       playerElement.style.visibility = 'visible';
       try {
         player.loadVideoById(videoId);
+        disableCaptions(player);
       } catch (error) {
         console.error('Error loading video:', error);
         nextVideo();

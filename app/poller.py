@@ -334,6 +334,19 @@ def _archive_forever() -> None:
         time.sleep(config.ARCHIVE_INTERVAL)
 
 
+def _thumb_forever() -> None:
+    """Platzhalter-Vorschaubilder durch echte Frames ersetzen."""
+    from . import archive
+
+    conn = db.connect()
+    while True:
+        try:
+            archive.refresh_thumbnails(conn, limit=8)
+        except Exception:  # pragma: no cover - nur Logging
+            logger.exception("Thumbnail-Reparatur fehlgeschlagen")
+        time.sleep(45)
+
+
 def run(once: bool = False, dry_run: bool = False) -> None:
     from . import enrich
 
@@ -348,6 +361,7 @@ def run(once: bool = False, dry_run: bool = False) -> None:
     threading.Thread(target=_enrich_forever, daemon=True).start()
     if config.ARCHIVE_ENABLED:
         threading.Thread(target=_archive_forever, daemon=True).start()
+        threading.Thread(target=_thumb_forever, daemon=True).start()
 
     while True:
         stats = poll_cycle(conn, dry_run=dry_run)
