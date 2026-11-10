@@ -401,7 +401,47 @@ def current_video():
         source = payload.get("source") or "all"
         sort = payload.get("sort") or "old"
 
-    video = pool.pick(excluded, source, exclude_channels, sort)
+    conn = db.connect()
+    video = None
+
+    # Bis zu drei Kandidaten pruefen: der gespeicherte Zaehler kann veraltet
+    # sein, und ein Video mit Views darf gar nicht erst ausgeliefert werden.
+    for _ in range(3):
+        candidate = pool.pick(excluded, source, exclude_channels, sort)
+        if candidate is None:
+            break
+
+        video = candidate
+
+        if candidate["provider"] != "youtube" or db.remaining_quota(conn) <= 100:
+            break
+
+        try:
+            fresh = youtube.fetch_views(conn, candidate["id"])
+        except Exception:  # noqa: BLE001 - darf das Serving nie brechen
+            fresh = None
+
+        if fresh is None:
+            break
+
+        if fresh <= config.SERVE_MAX_VIEWS:
+            if fresh != candidate["views"]:
+                conn.execute(
+                    "UPDATE videos SET views = ? WHERE id = ?",
+                    (fresh, candidate["id"]),
+                )
+                conn.commit()
+            candidate["views"] = fresh
+            break
+
+        # Inzwischen gesehen: verbrauchen und den naechsten ziehen.
+        conn.execute(
+            "UPDATE videos SET views = ?, served = served + 1 WHERE id = ?",
+            (fresh, candidate["id"]),
+        )
+        conn.commit()
+        video = None
+
     if video is None:
         return (
             jsonify(
@@ -414,24 +454,7 @@ def current_video():
             503,
         )
 
-    # Sofort global verbrauchen, damit kein zweiter Nutzer das Video bekommt.
-    conn = db.connect()
-
-    # YouTube-Views veralten: beim Ausliefern frisch holen (1 Unit), damit
-    # die Anzeige stimmt und Videos mit Views aus dem Pool fallen.
-    if video["provider"] == "youtube" and db.remaining_quota(conn) > 100:
-        try:
-            fresh = youtube.fetch_views(conn, video["id"])
-        except Exception:  # noqa: BLE001 - Anzeige darf nie das Serving brechen
-            fresh = None
-
-        if fresh is not None and fresh != video["views"]:
-            conn.execute(
-                "UPDATE videos SET views = ? WHERE id = ?", (fresh, video["id"])
-            )
-            conn.commit()
-            video["views"] = fresh
-
+    # Global verbrauchen, damit kein zweiter Nutzer das Video bekommt.
     conn.execute(
         "UPDATE videos SET served = served + 1 WHERE id = ?", (video["id"],)
     )

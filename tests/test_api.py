@@ -364,6 +364,35 @@ def test_download_youtube_failure_returns_502(connection, monkeypatch, tmp_path)
     assert response.get_json()["error"] == "download_failed"
 
 
+def test_video_that_gained_views_is_skipped(connection, monkeypatch):
+    _reset_pool()
+    _insert_video(connection, "stale", 0)
+    _insert_video(connection, "fresh", 0)
+
+    def fake_views(conn, video_id):
+        return {"stale": 139, "fresh": 0}.get(video_id)
+
+    monkeypatch.setattr(api.youtube, "fetch_views", fake_views)
+
+    client = api.app.test_client()
+
+    served = set()
+    for _ in range(3):
+        response = client.get("/current-video")
+        if response.status_code != 200:
+            break
+        served.add(response.get_json()["id"])
+
+    assert "stale" not in served
+    assert served == {"fresh"}
+
+    stale = connection.execute(
+        "SELECT views, served FROM videos WHERE id = 'stale'"
+    ).fetchone()
+    assert stale["views"] == 139
+    assert stale["served"] == 1
+
+
 def test_video_by_id_returns_shared_video(connection):
     _insert_video(connection, "shared", 0, provider="archive")
 
