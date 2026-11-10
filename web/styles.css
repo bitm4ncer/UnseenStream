@@ -84,6 +84,22 @@ body.archive-mode #player {
   display: none;
 }
 
+/* Auf Touch-Geraeten liegt eine transparente Ebene ueber dem Player:
+   Swipes gehen sonst im YouTube-iframe verloren. */
+#swipe-layer {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  #swipe-layer {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    touch-action: none;
+  }
+}
+
 /* Slide transitions when changing video */
 @keyframes slideOutUp {
   to {
@@ -776,6 +792,46 @@ body:not(.controls-visible) #overlay {
   margin-bottom: 8px;
   font-size: 30px;
   color: rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 720px) {
+  #source-toggle,
+  #sort-toggle {
+    padding: 2px;
+  }
+
+  #sort-toggle {
+    margin-left: 6px;
+  }
+
+  .source-btn {
+    width: 26px;
+    height: 24px;
+  }
+
+  .source-btn img {
+    width: 15px;
+    height: auto;
+  }
+
+  .sort-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  .unseen-count {
+    margin-right: 8px;
+    font-size: 10px;
+  }
+
+  .unseen-label {
+    display: none;
+  }
+
+  #autoplay-btn {
+    padding: 6px 9px;
+    font-size: 10px;
+  }
 }
 
 /* ---------- Mobile --------------------------------------- */

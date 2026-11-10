@@ -22,6 +22,8 @@ let isLoading = false;
 let isAutoplayEnabled = false;
 let currentProvider = 'youtube';
 
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+
 // Zuletzt gesehene Uploader: verhindert, dass kurz hintereinander mehrere
 // Videos derselben Quelle auftauchen.
 const CHANNEL_COOLDOWN = 50;
@@ -171,7 +173,7 @@ function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
     width: '100%',
     playerVars: {
       autoplay: 1,
-      controls: 1,
+      controls: isTouchDevice ? 0 : 1,
       modestbranding: 1,
       rel: 0,
       playsinline: 1,
@@ -611,8 +613,7 @@ container.addEventListener('touchend', (e) => {
   handleSwipe();
 }, { passive: true });
 
-function handleSwipe() {
-  const swipeDistanceX = touchStartX - touchEndX;
+function handleSwipe() {  const swipeDistanceX = touchStartX - touchEndX;
   const swipeDistanceY = touchStartY - touchEndY;
   const threshold = 50;
 
@@ -640,6 +641,41 @@ function handleSwipe() {
       previousVideo('swipe');
     }
   }
+}
+
+// Tippen auf das Video: Play/Pause. Die Ebene liegt ueber dem YouTube-iframe,
+// damit Swipes ueberhaupt ankommen.
+const swipeLayer = document.getElementById('swipe-layer');
+
+if (swipeLayer) {
+  let tapStartX = 0;
+  let tapStartY = 0;
+  let tapStartedAt = 0;
+
+  swipeLayer.addEventListener(
+    'touchstart',
+    (event) => {
+      const touch = event.changedTouches[0];
+      tapStartX = touch.screenX;
+      tapStartY = touch.screenY;
+      tapStartedAt = Date.now();
+    },
+    { passive: true }
+  );
+
+  swipeLayer.addEventListener(
+    'touchend',
+    (event) => {
+      const touch = event.changedTouches[0];
+      const movedX = Math.abs(tapStartX - touch.screenX);
+      const movedY = Math.abs(tapStartY - touch.screenY);
+
+      if (movedX < 10 && movedY < 10 && Date.now() - tapStartedAt < 400) {
+        togglePlayPause('tap');
+      }
+    },
+    { passive: true }
+  );
 }
 
 // Keyboard support for desktop
@@ -1184,7 +1220,7 @@ async function refreshUnseenCount() {
     const data = await response.json();
     if (typeof data.count !== 'number') return;
 
-    unseenCountEl.textContent = `${data.count.toLocaleString('en-US')} unseen`;
+    unseenCountEl.innerHTML = `${data.count.toLocaleString('en-US')} <span class="unseen-label">unseen</span>`;
   } catch (error) {
     /* Zaehler ist ein Gimmick, Fehler bleiben still. */
   }
