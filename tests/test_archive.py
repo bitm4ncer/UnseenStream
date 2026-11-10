@@ -1,4 +1,12 @@
-from app import archive
+import pytest
+
+from app import db, archive
+
+
+@pytest.fixture(autouse=True)
+def _no_deep_query(monkeypatch):
+    """Standardmaessig kein Deep-Fenster, sonst gehen Tests ins Netz."""
+    monkeypatch.setattr(archive, "search_deep", lambda cursor=None, limit=None: [])
 
 
 def _doc(identifier="item1", downloads=0, title="Titel"):
@@ -183,6 +191,63 @@ def test_refresh_thumbnails_keeps_real_image(connection, monkeypatch):
     ).fetchone()
     assert row["thumbnail"].startswith("https://archive.org/services/img/")
     assert row["thumb_checked"] == 1
+
+
+def test_deep_cursor_moves_backwards(connection, monkeypatch):
+    deep = [
+        {**_doc("old1"), "addeddate": "2026-10-01T12:00:00Z"},
+        {**_doc("old2"), "addeddate": "2026-09-20T08:00:00Z"},
+    ]
+    monkeypatch.setattr(
+        archive, "search_deep", lambda cursor=None, limit=None: deep
+    )
+    monkeypatch.setattr(
+        archive,
+        "fetch_metadata",
+        lambda ident: {
+            "duration_s": 600,
+            "size": 1,
+            "media_url": f"https://archive.org/download/{ident}/v.mp4",
+        },
+    )
+    monkeypatch.setattr(archive.time, "sleep", lambda seconds: None)
+
+    archive.discover(connection)
+
+    # Eine Sekunde vor dem aeltesten Item, damit es keinen Ueberlapp gibt.
+    assert db.get_meta(connection, "archive_deep_cursor") == "2026-09-20T07:59:59Z"
+
+
+def test_probe_media_accepts_video(monkeypatch):
+    class Response:
+        status_code = 206
+        headers = {"Content-Type": "video/mp4"}
+
+        def close(self):
+            pass
+
+    class Session:
+        def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(archive, "_http", lambda: Session())
+    assert archive.probe_media("https://archive.org/download/x/v.mp4") is True
+
+
+def test_probe_media_rejects_html_error_page(monkeypatch):
+    class Response:
+        status_code = 403
+        headers = {"Content-Type": "text/html; charset=utf-8"}
+
+        def close(self):
+            pass
+
+    class Session:
+        def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(archive, "_http", lambda: Session())
+    assert archive.probe_media("https://archive.org/download/x/v.mp4") is False
 
 
 def test_channel_title_prefers_uploader():

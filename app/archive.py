@@ -26,6 +26,8 @@ META_URL = "https://archive.org/metadata/{identifier}"
 THUMB_URL = "https://archive.org/services/img/{identifier}"
 
 VIDEO_FILE = re.compile(r"\.(mp4|webm|ogv|m4v)$", re.IGNORECASE)
+# Nur Container, die ein Browser ohne Plugin abspielen kann.
+PLAYABLE_FILE = re.compile(r"\.(mp4|webm|m4v)$", re.IGNORECASE)
 DOWNLOAD_URL = "https://archive.org/download/{identifier}/{path}"
 
 # archive.org liefert fuer Items ohne echtes Vorschaubild ein generisches
@@ -43,22 +45,9 @@ def _http() -> requests.Session:
     return _session
 
 
-def search_recent(hours: int | None = None, limit: int | None = None) -> list[dict]:
-    """Filme mit 0 Downloads, die bereits alt genug zum Ausliefern sind.
-
-    Das Fenster beginnt bei ``US_MIN_AGE_HOURS``, weil juengere Items beim
-    Ausliefern ohnehin verworfen werden - sie werden spaeter erfasst, wenn
-    sie in dieses Fenster hineinwachsen.
-    """
-    rows = limit or config.ARCHIVE_LIMIT
-    end = db.iso(db.utcnow() - timedelta(hours=config.MIN_AGE_HOURS))
-    start = db.iso(db.utcnow() - timedelta(hours=config.MAX_AGE_HOURS))
-
+def _search(query: str, limit: int) -> list[dict]:
     params = {
-        "q": (
-            f"mediatype:movies AND downloads:0 "
-            f"AND addeddate:[{start} TO {end}]"
-        ),
+        "q": query,
         "fl[]": [
             "identifier",
             "title",
@@ -69,13 +58,37 @@ def search_recent(hours: int | None = None, limit: int | None = None) -> list[di
             "uploader",
         ],
         "sort[]": "addeddate desc",
-        "rows": str(rows),
+        "rows": str(limit),
         "output": "json",
     }
 
     response = _http().get(SEARCH_URL, params=params, timeout=30)
     response.raise_for_status()
     return response.json().get("response", {}).get("docs", [])
+
+
+def search_recent(limit: int | None = None) -> list[dict]:
+    """Frische Filme mit 0 Downloads (ab US_MIN_AGE_HOURS)."""
+    rows = limit or config.ARCHIVE_LIMIT
+    end = db.iso(db.utcnow() - timedelta(hours=config.MIN_AGE_HOURS))
+    start = db.iso(db.utcnow() - timedelta(hours=config.ARCHIVE_FRESH_HOURS))
+
+    return _search(
+        f"mediatype:movies AND downloads:0 AND addeddate:[{start} TO {end}]", rows
+    )
+
+
+def search_deep(cursor: str | None = None, limit: int | None = None) -> list[dict]:
+    """Alte, nie geoeffnete Filme: vom Cursor rueckwaerts bis zu DEEP_DAYS."""
+    rows = limit or config.ARCHIVE_DEEP_LIMIT
+    start = db.iso(db.utcnow() - timedelta(days=config.ARCHIVE_DEEP_DAYS))
+    end = cursor or db.iso(
+        db.utcnow() - timedelta(hours=config.ARCHIVE_FRESH_HOURS)
+    )
+
+    return _search(
+        f"mediatype:movies AND downloads:0 AND addeddate:[{start} TO {end}]", rows
+    )
 
 
 def fetch_metadata(identifier: str) -> dict | None:
@@ -94,10 +107,14 @@ def fetch_metadata(identifier: str) -> dict | None:
     except ValueError:
         return None
 
+    if str(payload.get("metadata", {}).get("access-restricted-item", "")).lower() == "true":
+        return None
+
     files = [
         item
         for item in payload.get("files", [])
-        if VIDEO_FILE.search(item.get("name", ""))
+        if PLAYABLE_FILE.search(item.get("name", ""))
+        and str(item.get("private", "")).lower() != "true"
     ]
     if not files:
         return None
@@ -123,12 +140,40 @@ def fetch_metadata(identifier: str) -> dict | None:
     path = "/".join(
         requests.utils.quote(part) for part in main.get("name", "").split("/")
     )
+    media_url = DOWNLOAD_URL.format(identifier=identifier, path=path)
+
+    if not probe_media(media_url):
+        logger.debug("Archive-Datei nicht abrufbar: %s", media_url)
+        return None
 
     return {
         "duration_s": duration,
         "size": int(main.get("size") or 0),
-        "media_url": DOWNLOAD_URL.format(identifier=identifier, path=path),
+        "media_url": media_url,
     }
+
+
+def probe_media(url: str) -> bool:
+    """Kurz pruefen, ob die Datei wirklich ausgeliefert wird.
+
+    Access-restricted Items liefern trotz Eintrag in den Metadaten eine
+    403-HTML-Seite. Ohne diesen Check landet sowas im Pool und der Player
+    springt endlos weiter.
+    """
+    try:
+        response = _http().get(
+            url, headers={"Range": "bytes=0-1"}, timeout=15, stream=True
+        )
+    except requests.RequestException:
+        return False
+
+    try:
+        if response.status_code not in (200, 206):
+            return False
+        content_type = response.headers.get("Content-Type", "").lower()
+        return content_type.startswith(("video/", "application/octet-stream"))
+    finally:
+        response.close()
 
 
 def thumb_is_placeholder(identifier: str) -> bool:
@@ -220,6 +265,28 @@ def refresh_thumbnails(conn, limit: int = 8) -> int:
     return fixed
 
 
+def verify_archive(conn, limit: int = 500) -> int:
+    """Entfernt Archive-Zeilen, deren Datei nicht mehr abrufbar ist."""
+    rows = conn.execute(
+        "SELECT id, media_url FROM videos "
+        "WHERE provider='archive' AND media_url IS NOT NULL AND served=0 LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+    removed = 0
+    for row in rows:
+        if not probe_media(row["media_url"]):
+            conn.execute("DELETE FROM videos WHERE id = ?", (row["id"],))
+            conn.commit()
+            removed += 1
+        time.sleep(0.1)
+
+    conn.commit()
+    if removed:
+        logger.info("%d nicht abrufbare Archive-Items entfernt", removed)
+    return removed
+
+
 def _channel_title(doc: dict) -> str:
     uploader = doc.get("uploader")
     if uploader:
@@ -228,10 +295,7 @@ def _channel_title(doc: dict) -> str:
     return collections[0] if collections else "archive.org"
 
 
-def discover(conn, limit: int | None = None) -> dict:
-    """Holt neue 0-Download-Items und legt sie als Kandidaten ab."""
-    docs = search_recent(limit=limit)
-    now = db.iso(db.utcnow())
+def _ingest(conn, docs: list[dict], now: str) -> tuple[int, int]:
     added = 0
     refreshed = 0
 
@@ -298,14 +362,62 @@ def discover(conn, limit: int | None = None) -> dict:
                 meta["media_url"],
             ),
         )
-        conn.commit()
         added += 1
 
+        # Sofort committen: die Transaktion darf nie ueber einen
+        # Netzwerk-Call offen bleiben, sonst blockiert sie Poller und API.
+        conn.commit()
+
     conn.commit()
-    stats = {"found": len(docs), "added": added, "refreshed": refreshed}
-    if added or refreshed:
+    return added, refreshed
+
+
+def discover(conn, limit: int | None = None) -> dict:
+    """Frische Items plus alte, nie geoeffnete Items aus dem Deep-Fenster."""
+    now = db.iso(db.utcnow())
+
+    fresh = search_recent(limit=limit)
+    added, refreshed = _ingest(conn, fresh, now)
+
+    deep = search_deep(
+        cursor=db.get_meta(conn, "archive_deep_cursor"),
+        limit=config.ARCHIVE_DEEP_LIMIT,
+    )
+    deep_added, deep_refreshed = 0, 0
+    if deep:
+        deep_added, deep_refreshed = _ingest(conn, deep, now)
+
+        oldest = min(
+            (doc.get("addeddate") for doc in deep if doc.get("addeddate")),
+            default=None,
+        )
+        if oldest:
+            # Eine Sekunde zurueck, damit der Cursor nicht am selben
+            # Item kleben bleibt.
+            try:
+                next_cursor = db.parse_iso(oldest) - timedelta(seconds=1)
+                db.set_meta(conn, "archive_deep_cursor", db.iso(next_cursor))
+            except (TypeError, ValueError):
+                pass
+            conn.commit()
+    else:
+        # Fenster durchgelaufen: beim naechsten Mal wieder vorne beginnen.
+        db.set_meta(
+            conn,
+            "archive_deep_cursor",
+            db.iso(db.utcnow() - timedelta(hours=config.ARCHIVE_FRESH_HOURS)),
+        )
+        conn.commit()
+
+    stats = {
+        "found": len(fresh) + len(deep),
+        "added": added + deep_added,
+        "refreshed": refreshed + deep_refreshed,
+        "deep": len(deep),
+    }
+    if stats["added"] or stats["refreshed"]:
         logger.info(
-            "Archive: %(found)s Treffer, %(added)s neu, %(refreshed)s aktualisiert"
-            % stats
+            "Archive: %(found)s Treffer (%(deep)s deep), %(added)s neu, "
+            "%(refreshed)s aktualisiert" % stats
         )
     return stats

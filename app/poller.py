@@ -365,7 +365,12 @@ def run(once: bool = False, dry_run: bool = False) -> None:
 
     last_prune = 0.0
     while True:
-        stats = poll_cycle(conn, dry_run=dry_run)
+        try:
+            stats = poll_cycle(conn, dry_run=dry_run)
+        except Exception:  # pragma: no cover - DB-Lock darf nicht toeten
+            logger.exception("Poll-Zyklus fehlgeschlagen")
+            time.sleep(30)
+            continue
 
         # Alle fuenf Minuten alles loeschen, was nie wieder ausgeliefert wird.
         if time.time() - last_prune > 300:

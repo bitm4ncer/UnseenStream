@@ -84,7 +84,7 @@ def test_popular_video_is_ignored(connection):
 
 def test_old_video_is_ignored(connection):
     channel = insert_channel(connection)
-    feed = make_feed("UCtest", [make_entry("vid3", views=0, age_hours=240)])
+    feed = make_feed("UCtest", [make_entry("vid3", views=0, age_hours=3000)])
 
     hits = poller._apply_feed(connection, channel, feed)
 

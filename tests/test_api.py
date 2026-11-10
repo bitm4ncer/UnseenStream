@@ -96,7 +96,7 @@ def test_shorts_are_excluded(connection):
 def test_stale_videos_are_not_served(connection):
     _reset_pool()
     _insert_video(connection, "fresh", 0, age_hours=3)
-    _insert_video(connection, "stale", 0, age_hours=500)
+    _insert_video(connection, "stale", 0, age_hours=3000)
 
     client = api.app.test_client()
     payload = client.get("/current-video").get_json()
@@ -241,6 +241,38 @@ def test_exclude_channels_falls_back_to_recent_ten(connection):
     ).get_json()
 
     assert payload["id"] == "a"
+
+
+def test_age_weight_prefers_older_videos():
+    now = db.utcnow()
+    young = api.age_weight(db.iso(now - timedelta(hours=2)), now)
+    old = api.age_weight(db.iso(now - timedelta(days=30)), now)
+
+    assert old > young
+    assert 30.9 < old < 31.1
+
+
+def test_sort_weights_inverts_age_preference():
+    weights = [1.0, 31.0, 61.0]
+
+    assert api.sort_weights(weights, "old") == weights
+    inverted = api.sort_weights(weights, "new")
+
+    # Neuestes (kleinstes Gewicht) wird am wahrscheinlichsten.
+    assert inverted[0] == 61.0
+    assert inverted[-1] == 1.0
+
+
+def test_unseen_count_can_filter_by_source(connection):
+    _reset_pool()
+    _insert_video(connection, "yt", 0, provider="youtube")
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+
+    assert client.get("/unseen-count").get_json()["count"] == 2
+    assert client.get("/unseen-count?source=archive").get_json()["count"] == 1
+    assert client.get("/unseen-count?source=youtube").get_json()["count"] == 1
 
 
 def test_response_includes_provider(connection):

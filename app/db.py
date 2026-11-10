@@ -142,7 +142,7 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=10000")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
@@ -155,12 +155,12 @@ def connect(path: str | None = None) -> sqlite3.Connection:
 
 
 def prune_consumed(conn: sqlite3.Connection) -> int:
-    """Zeilen entfernen, die nie wieder ausgeliefert werden koennen.
+    """Zeilen mit Views entfernen.
 
-    Videos mit Views sind draussen, servierte ebenso. Das haelt die Tabelle
-    klein, ohne dass die Zaehlung teurer wird.
+    Servierte Zeilen bleiben bewusst stehen: sie sind der Dedupe-Marker,
+    sonst wuerde der Sammler bereits gesehene Videos erneut aufnehmen.
     """
-    cursor = conn.execute("DELETE FROM videos WHERE views > 0 OR served > 0")
+    cursor = conn.execute("DELETE FROM videos WHERE views > 0")
     conn.commit()
     return cursor.rowcount
 

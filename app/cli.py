@@ -49,6 +49,11 @@ def main(argv: list[str] | None = None) -> int:
     enrich_parser = sub.add_parser("enrich", help="Fehlende Laufzeiten nachtragen")
     enrich_parser.add_argument("--limit", type=int, default=500)
 
+    verify_parser = sub.add_parser(
+        "verify", help="Nicht abrufbare Archive-Items entfernen"
+    )
+    verify_parser.add_argument("--limit", type=int, default=1000)
+
     sub.add_parser("initdb", help="Datenbank anlegen")
 
     stats_parser = sub.add_parser("stats", help="Kennzahlen ausgeben")
@@ -90,6 +95,12 @@ def main(argv: list[str] | None = None) -> int:
         from . import enrich
 
         enrich.enrich_batch(db.connect(), limit=args.limit)
+        return 0
+
+    if args.role == "verify":
+        from . import archive
+
+        archive.verify_archive(db.connect(), limit=args.limit)
         return 0
 
     if args.role == "initdb":

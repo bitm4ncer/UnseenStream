@@ -39,7 +39,7 @@ def test_meta_roundtrip(connection):
     db.set_meta(connection, "term_index", "7")
     assert db.get_meta(connection, "term_index") == "7"
 
-def test_prune_removes_viewed_and_consumed(connection):
+def test_prune_removes_viewed_and_keeps_served(connection):
     now = db.utcnow()
     rows = [
         ("clean", 0, 0),
@@ -57,6 +57,6 @@ def test_prune_removes_viewed_and_consumed(connection):
         )
     connection.commit()
 
-    assert db.prune_consumed(connection) == 2
-    remaining = [row[0] for row in connection.execute("SELECT id FROM videos")]
-    assert remaining == ["clean"]
+    assert db.prune_consumed(connection) == 1
+    remaining = {row[0] for row in connection.execute("SELECT id FROM videos")}
+    assert remaining == {"clean", "served"}

@@ -21,6 +21,27 @@ app.logger.setLevel(logging.INFO)
 _started_at = time.time()
 
 
+AGE_WEIGHT_CAP = 60.0
+
+
+def age_weight(published_at: str, now) -> float:
+    """Aeltere Videos werden bevorzugt: 1 + Alter in Tagen (max. 60)."""
+    try:
+        age_hours = (now - db.parse_iso(published_at)).total_seconds() / 3600
+    except (TypeError, ValueError):
+        return 1.0
+
+    age_days = max(0.0, age_hours / 24)
+    return 1.0 + min(age_days, AGE_WEIGHT_CAP)
+
+
+def sort_weights(weights: list[float], sort: str | None) -> list[float]:
+    """``new`` dreht die Altersgewichtung um: neueste zuerst."""
+    if sort != "new":
+        return weights
+    return [2.0 + AGE_WEIGHT_CAP - weight for weight in weights]
+
+
 class CandidatePool:
     """Haelt die servierbaren Videos im Speicher und laedt sie periodisch neu."""
 
@@ -28,7 +49,7 @@ class CandidatePool:
         self._lock = threading.Lock()
         self._pick_lock = threading.Lock()
         self._items: list[dict] = []
-        self._weights: list[int] = []
+        self._weights: list[float] = []
         self._loaded_at = 0.0
         self._ttl = ttl
 
@@ -66,6 +87,7 @@ class CandidatePool:
             params.append(config.SERVE_MAX_PER_REQUEST)
 
             rows = conn.execute(query, params).fetchall()
+            now_dt = db.utcnow()
             self._items = []
             for row in rows:
                 item = dict(row)
@@ -74,11 +96,13 @@ class CandidatePool:
                     item.get("channel_id") or item.get("channel_title") or ""
                 )
                 self._items.append(item)
-            self._weights = [101 - min(int(row["views"]), 100) for row in rows]
+            self._weights = [age_weight(row["published_at"], now_dt) for row in rows]
             self._loaded_at = now
 
-    def size(self) -> int:
+    def size(self, source: str | None = None) -> int:
         self.refresh()
+        if source in ("youtube", "archive"):
+            return sum(1 for item in self._items if item["provider"] == source)
         return len(self._items)
 
     def pick(
@@ -86,6 +110,7 @@ class CandidatePool:
         excluded: set[str] | None = None,
         source: str | None = None,
         exclude_channels: list[str] | None = None,
+        sort: str | None = "old",
     ) -> dict | None:
         self.refresh()
 
@@ -96,7 +121,7 @@ class CandidatePool:
             if not items:
                 return None
 
-            pairs = list(zip(items, self._weights))
+            pairs = list(zip(items, sort_weights(self._weights, sort)))
             wanted = source if source in ("youtube", "archive") else None
 
             if wanted:
@@ -185,7 +210,10 @@ def health():
 def unseen_count():
     # Kostenlos: die Laenge des In-Memory-Pools, kein DB-Query solange der
     # Cache frisch ist (20 s TTL). Sinkt sofort beim Ausliefern.
-    response = jsonify({"count": pool.size()})
+    source = request.args.get("source")
+    response = jsonify(
+        {"count": pool.size(source if source in ("youtube", "archive") else None)}
+    )
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -195,13 +223,15 @@ def current_video():
     excluded: set[str] = set()
     exclude_channels: list[str] = []
     source = "all"
+    sort = "old"
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         excluded = set(payload.get("excluded_ids") or [])
         exclude_channels = list(payload.get("exclude_channels") or [])
         source = payload.get("source") or "all"
+        sort = payload.get("sort") or "old"
 
-    video = pool.pick(excluded, source, exclude_channels)
+    video = pool.pick(excluded, source, exclude_channels, sort)
     if video is None:
         return (
             jsonify(
