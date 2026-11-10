@@ -3,7 +3,15 @@ from datetime import timedelta
 from app import api, db
 
 
-def _insert_video(conn, video_id, views, age_hours=3, duration=600, provider="youtube"):
+def _insert_video(
+    conn,
+    video_id,
+    views,
+    age_hours=3,
+    duration=600,
+    provider="youtube",
+    channel_id="UCtest",
+):
     now = db.utcnow()
     media_url = (
         f"https://archive.org/download/{video_id}/v.mp4"
@@ -15,11 +23,12 @@ def _insert_video(conn, video_id, views, age_hours=3, duration=600, provider="yo
         INSERT INTO videos (id, channel_id, channel_title, title, thumbnail,
                             views, published_at, discovered_at, last_seen,
                             source, duration_s, provider, media_url)
-        VALUES (?, 'UCtest', 'Kanal', ?, 'https://example.invalid/t.jpg', ?,
+        VALUES (?, ?, 'Kanal', ?, 'https://example.invalid/t.jpg', ?,
                 ?, ?, ?, 'rss', ?, ?, ?)
         """,
         (
             video_id,
+            channel_id,
             f"Titel {video_id}",
             views,
             db.iso(now - timedelta(hours=age_hours)),
@@ -168,6 +177,32 @@ def test_source_filter_empty_provider_returns_503(connection):
     response = client.post("/current-video", json={"source": "archive"})
 
     assert response.status_code == 503
+
+
+def test_exclude_channels_avoids_recent_uploader(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0, channel_id="UCa")
+    _insert_video(connection, "b", 0, channel_id="UCb")
+
+    client = api.app.test_client()
+    payload = client.post(
+        "/current-video", json={"exclude_channels": ["UCa"]}
+    ).get_json()
+
+    assert payload["id"] == "b"
+    assert payload["channelId"] == "UCb"
+
+
+def test_exclude_channels_falls_back_when_all_match(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0, channel_id="UCa")
+
+    client = api.app.test_client()
+    payload = client.post(
+        "/current-video", json={"exclude_channels": ["UCa"]}
+    ).get_json()
+
+    assert payload["id"] == "a"
 
 
 def test_response_includes_provider(connection):

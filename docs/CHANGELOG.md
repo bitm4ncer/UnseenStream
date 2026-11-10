@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Download button for archive.org items: fetches the public MP4 and saves it
   via a blob URL. Disabled for YouTube, which exposes no file and does not
   allow downloading.
+- Uploader cooldown: the browser remembers the last five channels and the
+  API avoids them for the next picks, so the same uploader does not appear
+  twice in a row.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

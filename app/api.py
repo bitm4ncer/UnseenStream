@@ -43,7 +43,7 @@ class CandidatePool:
 
             conn = db.connect()
             query = (
-                "SELECT id, title, channel_title, thumbnail, views, "
+                "SELECT id, title, channel_id, channel_title, thumbnail, views, "
                 "published_at, provider, media_url "
                 "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0 "
                 "AND (provider != 'archive' OR media_url IS NOT NULL)"
@@ -66,7 +66,14 @@ class CandidatePool:
             params.append(config.SERVE_MAX_PER_REQUEST)
 
             rows = conn.execute(query, params).fetchall()
-            self._items = [dict(row) for row in rows]
+            self._items = []
+            for row in rows:
+                item = dict(row)
+                # Einheitlicher Schluessel fuer die Uploader-Sperre.
+                item["channel_key"] = (
+                    item.get("channel_id") or item.get("channel_title") or ""
+                )
+                self._items.append(item)
             self._weights = [101 - min(int(row["views"]), 100) for row in rows]
             self._loaded_at = now
 
@@ -75,7 +82,10 @@ class CandidatePool:
         return len(self._items)
 
     def pick(
-        self, excluded: set[str] | None = None, source: str | None = None
+        self,
+        excluded: set[str] | None = None,
+        source: str | None = None,
+        exclude_channels: set[str] | None = None,
     ) -> dict | None:
         self.refresh()
 
@@ -100,6 +110,15 @@ class CandidatePool:
                     (item, weight)
                     for item, weight in pairs
                     if item["id"] not in excluded
+                ]
+                if remaining:
+                    pairs = remaining
+
+            if exclude_channels:
+                remaining = [
+                    (item, weight)
+                    for item, weight in pairs
+                    if item["channel_key"] not in exclude_channels
                 ]
                 if remaining:
                     pairs = remaining
@@ -152,16 +171,19 @@ def health():
 @app.route("/current-video", methods=["GET", "POST"])
 def current_video():
     excluded: set[str] = set()
+    exclude_channels: set[str] = set()
     source = "all"
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         excluded = set(payload.get("excluded_ids") or [])
+        exclude_channels = set(payload.get("exclude_channels") or [])
         source = payload.get("source") or "all"
 
-    video = pool.pick(excluded, source)
+    video = pool.pick(excluded, source, exclude_channels)
     if video is None:
         return (
-            jsonify(                {
+            jsonify(
+                {
                     "error": "no_videos",
                     "message": "Keine Kandidaten im Pool. Der Poller fuellt ihn laufend.",
                     "retry_after": 15,
@@ -181,6 +203,7 @@ def current_video():
         {
             "id": video["id"],
             "title": video["title"],
+            "channelId": video["channel_key"],
             "channelTitle": video["channel_title"],
             "thumbnail": video["thumbnail"],
             "viewCount": video["views"],

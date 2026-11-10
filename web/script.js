@@ -23,6 +23,13 @@ let isAutoplayEnabled = false;
 let sourceFilter = localStorage.getItem('source_filter') || 'all';
 let currentProvider = 'youtube';
 
+// Zuletzt gesehene Uploader: verhindert, dass kurz hintereinander mehrere
+// Videos derselben Quelle auftauchen.
+const CHANNEL_COOLDOWN = 5;
+let recentChannels = JSON.parse(
+  localStorage.getItem('recent_channels') || '[]'
+);
+
 // Viewed videos tracking (to prevent duplicates)
 let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
 
@@ -45,6 +52,7 @@ async function fetchNextVideo() {
       },
       body: JSON.stringify({
         excluded_ids: excludedIds,
+        exclude_channels: recentChannels,
         source: sourceFilter,
       }),
       signal: AbortSignal.timeout(8000),
@@ -65,6 +73,7 @@ async function fetchNextVideo() {
       id: { videoId: video.id },
       provider: video.provider || 'youtube',
       mediaUrl: video.mediaUrl || null,
+      channelId: video.channelId || null,
       snippet: {
         title: video.title,
         channelTitle: video.channelTitle,
@@ -323,6 +332,7 @@ async function fetchVideos() {
       if (!video) break;
 
       videoQueue.push(video);
+      rememberChannel(video);
 
       if (!currentVideo) {
         currentIndex = 0;
@@ -346,6 +356,18 @@ async function fetchVideos() {
   } finally {
     isLoading = false;
   }
+}
+
+function rememberChannel(video) {
+  const key = video.channelId || video.snippet?.channelTitle;
+  if (!key) return;
+
+  recentChannels = [
+    key,
+    ...recentChannels.filter((entry) => entry !== key),
+  ].slice(0, CHANNEL_COOLDOWN);
+
+  localStorage.setItem('recent_channels', JSON.stringify(recentChannels));
 }
 
 function loadVideo(video, direction = 'next') {
