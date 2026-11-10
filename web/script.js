@@ -20,7 +20,6 @@ let touchEndX = 0;
 let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
-let sourceFilter = localStorage.getItem('source_filter') || 'all';
 let currentProvider = 'youtube';
 
 // Zuletzt gesehene Uploader: verhindert, dass kurz hintereinander mehrere
@@ -53,7 +52,7 @@ async function fetchNextVideo() {
       body: JSON.stringify({
         excluded_ids: excludedIds,
         exclude_channels: recentChannels,
-        source: sourceFilter,
+        source: sourceParam(),
       }),
       signal: AbortSignal.timeout(8000),
     });
@@ -913,21 +912,58 @@ function checkFirstVisit() {
 }
 
 // ============================================
-// Source Filter (Alle / YouTube / Archive)
+// Source Filter (YouTube / archive.org)
 // ============================================
 
+const SOURCES = ['youtube', 'archive'];
+
+function loadEnabledSources() {
+  const stored = localStorage.getItem('enabled_sources');
+  if (stored) {
+    try {
+      const list = JSON.parse(stored);
+      const valid = list.filter((source) => SOURCES.includes(source));
+      if (valid.length) return new Set(valid);
+    } catch (error) {
+      /* kaputter Wert, unten neu aufbauen */
+    }
+  }
+
+  // Migration vom alten Einzel-Filter.
+  const legacy = localStorage.getItem('source_filter');
+  if (legacy === 'youtube') return new Set(['youtube']);
+  if (legacy === 'archive') return new Set(['archive']);
+  return new Set(SOURCES);
+}
+
+let enabledSources = loadEnabledSources();
+
+function sourceParam() {
+  if (enabledSources.size === SOURCES.length) return 'all';
+  return enabledSources.has('archive') ? 'archive' : 'youtube';
+}
+
 function updateSourceButtons() {
-  document.querySelectorAll('#source-toggle button').forEach((button) => {
-    button.classList.toggle('active', button.dataset.source === sourceFilter);
+  document.querySelectorAll('#source-toggle .source-btn').forEach((button) => {
+    const enabled = enabledSources.has(button.dataset.source);
+    button.classList.toggle('active', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
   });
 }
 
-function setSource(source) {
-  if (!['all', 'youtube', 'archive'].includes(source)) return;
-  if (source === sourceFilter) return;
+function toggleSource(source) {
+  if (!SOURCES.includes(source)) return;
 
-  sourceFilter = source;
-  localStorage.setItem('source_filter', source);
+  if (enabledSources.has(source)) {
+    // Mindestens eine Quelle bleibt aktiv.
+    if (enabledSources.size === 1) return;
+    enabledSources.delete(source);
+  } else {
+    enabledSources.add(source);
+  }
+
+  localStorage.setItem('enabled_sources', JSON.stringify([...enabledSources]));
+  localStorage.removeItem('source_filter');
   updateSourceButtons();
 
   // Warteschlange verwerfen, damit der Filter sofort greift.
@@ -949,8 +985,8 @@ function setSource(source) {
   fetchVideos();
 }
 
-document.querySelectorAll('#source-toggle button').forEach((button) => {
-  button.addEventListener('click', () => setSource(button.dataset.source));
+document.querySelectorAll('#source-toggle .source-btn').forEach((button) => {
+  button.addEventListener('click', () => toggleSource(button.dataset.source));
 });
 
 window.addEventListener('DOMContentLoaded', updateSourceButtons);
