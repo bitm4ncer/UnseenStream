@@ -176,19 +176,37 @@ function formatAge(iso) {
 // ============================================
 
 // Untertitel sind bei allen Videos aus: Modul entladen, damit YouTube sie
-// auch bei aktivierten CC nicht wieder einblendet.
+// auch bei aktivierten CC nicht wieder einblendet. YouTube laedt das Modul
+// nach jedem Videowechsel neu, deshalb mehrfach nachfassen.
 function disableCaptions(target) {
-  if (!target || typeof target.unloadModule !== 'function') return;
+  if (!target) return;
+
   try {
     target.unloadModule('captions');
   } catch (error) {
     /* Player noch nicht bereit */
   }
   try {
+    target.unloadModule('cc');
+  } catch (error) {
+    /* Modul nicht geladen */
+  }
+  try {
     target.setOption('captions', 'track', {});
   } catch (error) {
     /* aeltere Player-Versionen */
   }
+  try {
+    target.setOption('cc', 'track', {});
+  } catch (error) {
+    /* Modul nicht geladen */
+  }
+}
+
+function suppressCaptions(target) {
+  [0, 500, 1500, 3000, 6000].forEach((delay) => {
+    setTimeout(() => disableCaptions(target), delay);
+  });
 }
 
 function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
@@ -218,7 +236,7 @@ function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
 
 function onPlayerReady(event) {
   console.log('Player ready');
-  disableCaptions(event.target);
+  suppressCaptions(event.target);
 
   if (videoQueue.length > 0) {
     loadVideo(videoQueue[0]);
@@ -236,6 +254,8 @@ function onPlayerStateChange(event) {
   // Queue nachfuellen, sobald das Video laeuft
   if (event.data === YT.PlayerState.PLAYING) {
     preloadUpcoming();
+    // YouTube aktiviert CC beim Start gelegentlich wieder.
+    disableCaptions(event.target);
   }
 
   // Autoplay: move to next video when current video ends
@@ -524,7 +544,7 @@ function loadVideo(video, direction = 'next') {
       playerElement.style.visibility = 'visible';
       try {
         player.loadVideoById(videoId);
-        disableCaptions(player);
+        suppressCaptions(player);
       } catch (error) {
         console.error('Error loading video:', error);
         nextVideo();
