@@ -151,3 +151,31 @@ def test_enforce_caps_demotes_excess(connection, monkeypatch):
     ).fetchone()[0]
     assert hot == 1
     assert warm == 2
+
+
+def test_global_outage_keeps_fail_counters(connection, monkeypatch):
+    for index in range(25):
+        insert_channel(connection, channel_id=f"UCout{index:02d}", tier="cold")
+
+    monkeypatch.setattr(db.config, "POLL_BATCH", {"hot": 0, "warm": 0, "cold": 100})
+    monkeypatch.setattr(poller, "fetch_feed", lambda cid: (cid, "http", 404))
+
+    stats = poller.poll_cycle(connection)
+
+    assert stats["outage"] is True
+    streaks = [row[0] for row in connection.execute("SELECT fail_streak FROM channels")]
+    assert streaks and all(value == 0 for value in streaks)
+
+
+def test_single_failure_increments_counter(connection, monkeypatch):
+    insert_channel(connection, channel_id="UCalone", tier="cold")
+
+    monkeypatch.setattr(db.config, "POLL_BATCH", {"hot": 0, "warm": 0, "cold": 10})
+    monkeypatch.setattr(poller, "fetch_feed", lambda cid: (cid, "http", 404))
+
+    stats = poller.poll_cycle(connection)
+
+    assert stats["outage"] is False
+    assert connection.execute(
+        "SELECT fail_streak FROM channels WHERE id = 'UCalone'"
+    ).fetchone()[0] == 1

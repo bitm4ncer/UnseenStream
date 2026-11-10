@@ -44,13 +44,14 @@ def _upsert_video(conn, item: dict, source: str) -> None:
         """
         INSERT INTO videos
             (id, channel_id, channel_title, title, thumbnail, views,
-             published_at, discovered_at, last_seen, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             published_at, discovered_at, last_seen, source, duration_s)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             views = excluded.views,
             title = excluded.title,
             thumbnail = excluded.thumbnail,
-            last_seen = excluded.last_seen
+            last_seen = excluded.last_seen,
+            duration_s = COALESCE(excluded.duration_s, videos.duration_s)
         """,
         (
             item["id"],
@@ -59,12 +60,13 @@ def _upsert_video(conn, item: dict, source: str) -> None:
             snippet.get("title"),
             snippet.get("thumbnails", {}).get("medium", {}).get("url"),
             youtube.view_count(item),
-            db.iso(db.parse_iso(snippet["publishedAt"]))
+            db.normalize_ts(snippet["publishedAt"])
             if snippet.get("publishedAt")
             else None,
             now,
             now,
             source,
+            youtube.duration_of(item),
         ),
     )
 

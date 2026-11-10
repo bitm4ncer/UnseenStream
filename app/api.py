@@ -47,9 +47,15 @@ class CandidatePool:
             conn = db.connect()
             query = (
                 "SELECT id, title, channel_title, thumbnail, views, published_at "
-                "FROM videos WHERE views <= ?"
+                "FROM videos WHERE views <= ? AND duration_s > ?"
             )
-            params: list = [config.MAX_VIEWS]
+            params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
+
+            if config.MIN_AGE_HOURS > 0:
+                query += " AND published_at <= ?"
+                params.append(
+                    db.iso(db.utcnow() - timedelta(hours=config.MIN_AGE_HOURS))
+                )
 
             if config.MAX_AGE_HOURS > 0:
                 query += " AND published_at >= ?"
@@ -131,9 +137,7 @@ def health():
     channels = conn.execute(
         "SELECT COUNT(*) FROM channels WHERE alive = 1"
     ).fetchone()[0]
-    candidates = conn.execute(
-        "SELECT COUNT(*) FROM videos WHERE views <= ?", (config.MAX_VIEWS,)
-    ).fetchone()[0]
+    candidates = pool.size()
 
     return jsonify(
         {

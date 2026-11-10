@@ -56,12 +56,19 @@ docker compose run --rm us-discoverer python -m app.cli seed \
 | Variable | Default | Meaning |
 |---|---|---|
 | `YOUTUBE_API_KEY` | — | required for discovery |
-| `US_MAX_VIEWS` | `100` | upper view limit |
-| `US_MAX_AGE_HOURS` | `48` | candidate age window |
+| `US_MAX_VIEWS` | `100` | discovery filter: channels that produce low-view videos are kept |
+| `US_SERVE_MAX_VIEWS` | `0` | serving filter: only videos with this many views or fewer |
+| `US_MIN_AGE_HOURS` | `2` | serving filter: ignore videos younger than this |
+| `US_MAX_AGE_HOURS` | `48` | serving filter: ignore videos older than this |
+| `US_MIN_DURATION_S` | `180` | serving filter: exclude Shorts / anything this short |
 | `US_DAILY_QUOTA` | `9700` | API budget per Pacific day |
 | `US_SEARCHES_PER_HOUR` | `4` | discovery pace |
 | `US_HOT_INTERVAL` / `US_WARM_INTERVAL` / `US_COLD_INTERVAL` | `600` / `3600` / `21600` | poll intervals |
 | `US_LOG_LEVEL` | `INFO` | logging |
+
+Discovery and serving use different view thresholds on purpose: a channel
+that produced a 40-view video is still worth tracking, but only zero-view
+videos are shown.
 
 ## Endpoints
 

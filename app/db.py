@@ -76,6 +76,19 @@ def parse_iso(value: str) -> datetime:
     )
 
 
+def normalize_ts(value: str | None) -> str | None:
+    """Akzeptiert RFC3339 mit Z oder Offset und liefert unser Format."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return iso(parsed)
+
+
 def hours_ago(hours: int) -> str:
     return iso(utcnow() - timedelta(hours=hours))
 
@@ -95,6 +108,13 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+
+    columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(videos)")
+    }
+    if "duration_s" not in columns:
+        conn.execute("ALTER TABLE videos ADD COLUMN duration_s INTEGER")
+
     conn.commit()
 
     _local.conn = conn

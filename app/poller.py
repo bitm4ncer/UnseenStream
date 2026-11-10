@@ -37,17 +37,30 @@ def _throttle() -> None:
 
 
 def fetch_feed(channel_id: str) -> tuple[str, str, object]:
-    """Holt einen Feed. Rueckgabe: (channel_id, kind, payload)."""
-    _throttle()
-    url = config.FEED_URL.format(channel_id=channel_id)
-    try:
-        response = _session().get(url, timeout=config.FEED_TIMEOUT)
-    except requests.RequestException as exc:
-        return channel_id, "error", str(exc)
+    """Holt einen Feed mit einem Wiederholungsversuch.
 
-    if response.status_code == 200:
-        return channel_id, "ok", response.text
-    return channel_id, "http", response.status_code
+    YouTube antwortet seit Ende Oktober 2026 sporadisch mit 404/500 auf
+    gueltige Feeds. Ein einzelner Fehlschlag sagt daher nichts aus.
+    """
+    url = config.FEED_URL.format(channel_id=channel_id)
+    last: tuple[str, str, object] = (channel_id, "error", "kein Versuch")
+
+    for attempt in range(2):
+        _throttle()
+        try:
+            response = _session().get(url, timeout=config.FEED_TIMEOUT)
+        except requests.RequestException as exc:
+            last = (channel_id, "error", str(exc))
+        else:
+            if response.status_code == 200:
+                return channel_id, "ok", response.text
+            last = (channel_id, "http", response.status_code)
+            if response.status_code not in (404, 429, 500, 502, 503, 504):
+                return last
+
+        time.sleep(0.4 * (attempt + 1))
+
+    return last
 
 
 def _age_ok(published_at: str | None) -> bool:
@@ -91,9 +104,10 @@ def _apply_feed(conn, channel, feed: dict) -> int:
             """
             INSERT INTO videos
                 (id, channel_id, channel_title, title, thumbnail, views,
-                 published_at, discovered_at, last_seen, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'rss')
-            ON CONFLICT(id) DO NOTHING
+                 published_at, discovered_at, last_seen, source, duration_s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'rss', ?)
+            ON CONFLICT(id) DO UPDATE SET
+                duration_s = COALESCE(excluded.duration_s, videos.duration_s)
             """,
             (
                 video_id,
@@ -105,6 +119,7 @@ def _apply_feed(conn, channel, feed: dict) -> int:
                 entry["published_at"],
                 now,
                 now,
+                entry.get("duration_s"),
             ),
         )
         existing.add(video_id)
@@ -236,6 +251,19 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
     new_videos = 0
     failed = 0
 
+    # Globaler Ausfall? Dann keine Fehlzaehler erhoehen, sonst raeumt ein
+    # YouTube-Ausfall die ganze Watchlist ab.
+    outage = len(results) >= 20 and (
+        sum(1 for _, kind, _ in results if kind != "ok") / len(results) > 0.5
+    )
+    if outage:
+        logger.warning(
+            "RSS-Ausfall erkannt (%d von %d Feeds fehlgeschlagen) - "
+            "Fehlzaehler bleiben unveraendert",
+            sum(1 for _, kind, _ in results if kind != "ok"),
+            len(results),
+        )
+
     for channel_id, kind, payload in results:
         channel = by_id[channel_id]
         if kind == "ok":
@@ -248,6 +276,9 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
                 continue
 
         failed += 1
+        if outage:
+            continue
+
         fail_streak = channel["fail_streak"] + 1
         logger.info(
             "Feed %s fehlgeschlagen (%s: %s), Versuch %d",
@@ -262,7 +293,7 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
     enforce_caps(conn)
     conn.commit()
 
-    stats = {"polled": len(results), "new_videos": new_videos, "failed": failed}
+    stats = {"polled": len(results), "new_videos": new_videos, "failed": failed, "outage": outage}
     logger.info(
         "Poll-Zyklus: %(polled)s Feeds, %(new_videos)s neue Kandidaten, "
         "%(failed)s Fehler" % stats
@@ -270,11 +301,36 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
     return stats
 
 
-def run(once: bool = False, dry_run: bool = False) -> None:
+def _enrich_forever() -> None:
+    """Laufzeiten nachtragen, unabhaengig vom (langsamen) RSS-Zyklus."""
+    from . import enrich
+
     conn = db.connect()
     while True:
+        try:
+            if db.remaining_quota(conn) > 500:
+                enrich.enrich_batch(conn, limit=200)
+        except Exception:  # pragma: no cover - nur Logging
+            logger.exception("Enricher-Fehler")
+        time.sleep(30)
+
+
+def run(once: bool = False, dry_run: bool = False) -> None:
+    from . import enrich
+
+    conn = db.connect()
+
+    if once:
+        if not dry_run and db.remaining_quota(conn) > 500:
+            enrich.enrich_batch(conn, limit=200)
+        poll_cycle(conn, dry_run=dry_run)
+        return
+
+    threading.Thread(target=_enrich_forever, daemon=True).start()
+
+    while True:
         stats = poll_cycle(conn, dry_run=dry_run)
-        if once:
-            return
-        sleep_for = 5 if stats.get("polled") else 15
-        time.sleep(sleep_for)
+        if stats.get("outage"):
+            time.sleep(120)
+        else:
+            time.sleep(5 if stats.get("polled") else 15)

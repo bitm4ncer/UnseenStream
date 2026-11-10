@@ -202,7 +202,12 @@ fliegt raus.
 
 `GET|POST /current-video`
 
-- Kandidaten: `views ≤ US_MAX_VIEWS` und `published_at ≥ now − 48 h`.
+- Kandidaten: `views ≤ US_SERVE_MAX_VIEWS` (Default `0`),
+  `published_at` zwischen `now − 48 h` und `now − 2 h`,
+  `duration_s > US_MIN_DURATION_S` (Default `180`, schließt Shorts aus).
+- Die Filter greifen **beim Ausliefern**, nicht beim Sammeln: Ein Video, das
+  beim Fund erst 20 Minuten alt ist, wird mit zwei Stunden automatisch
+  eligible, ohne erneut gesucht werden zu müssen.
 - Gewicht: `101 − views` (0 Views = 101, 100 Views = 1).
 - `POST` akzeptiert `{"excluded_ids": [...]}`; bereits gesehene Videos
   werden übersprungen, solange Alternativen existieren.

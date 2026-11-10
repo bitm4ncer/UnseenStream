@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `app/` package with `discoverer`, `poller`, `api`, `seed` and a shared
   `db`/`config` layer.
+- Serving filters evaluated per request: zero views only, at least two hours
+  old, and longer than 180 seconds so Shorts never appear.
+- `enrich` job that backfills video durations (RSS does not carry them),
+  sharing the API budget with discovery.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

@@ -40,6 +40,15 @@ def main(argv: list[str] | None = None) -> int:
     seed_parser.add_argument("--limit", type=int, default=5000)
     seed_parser.add_argument("--dry-run", action="store_true")
 
+    bootstrap_parser = sub.add_parser(
+        "bootstrap", help="Pool ueber Uploads-Playlists fuellen (API-Fallback)"
+    )
+    bootstrap_parser.add_argument("--limit", type=int, default=500)
+    bootstrap_parser.add_argument("--dry-run", action="store_true")
+
+    enrich_parser = sub.add_parser("enrich", help="Fehlende Laufzeiten nachtragen")
+    enrich_parser.add_argument("--limit", type=int, default=500)
+
     sub.add_parser("initdb", help="Datenbank anlegen")
 
     stats_parser = sub.add_parser("stats", help="Kennzahlen ausgeben")
@@ -69,6 +78,18 @@ def main(argv: list[str] | None = None) -> int:
         from . import seed
 
         seed.run(args.from_pool, limit=args.limit, dry_run=args.dry_run)
+        return 0
+
+    if args.role == "bootstrap":
+        from . import bootstrap
+
+        bootstrap.run(limit=args.limit, dry_run=args.dry_run)
+        return 0
+
+    if args.role == "enrich":
+        from . import enrich
+
+        enrich.enrich_batch(db.connect(), limit=args.limit)
         return 0
 
     if args.role == "initdb":

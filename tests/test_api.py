@@ -3,14 +3,15 @@ from datetime import timedelta
 from app import api, db
 
 
-def _insert_video(conn, video_id, views, age_hours=1):
+def _insert_video(conn, video_id, views, age_hours=3, duration=600):
     now = db.utcnow()
     conn.execute(
         """
         INSERT INTO videos (id, channel_id, channel_title, title, thumbnail,
-                            views, published_at, discovered_at, last_seen, source)
+                            views, published_at, discovered_at, last_seen,
+                            source, duration_s)
         VALUES (?, 'UCtest', 'Kanal', ?, 'https://example.invalid/t.jpg', ?,
-                ?, ?, ?, 'rss')
+                ?, ?, ?, 'rss', ?)
         """,
         (
             video_id,
@@ -19,6 +20,7 @@ def _insert_video(conn, video_id, views, age_hours=1):
             db.iso(now - timedelta(hours=age_hours)),
             db.iso(now),
             db.iso(now),
+            duration,
         ),
     )
     conn.commit()
@@ -39,25 +41,45 @@ def test_empty_pool_returns_503(connection):
     assert response.get_json()["error"] == "no_videos"
 
 
-def test_only_low_view_videos_are_served(connection):
+def test_only_zero_view_videos_are_served(connection):
     _reset_pool()
-    _insert_video(connection, "low", 0)
-    _insert_video(connection, "mid", 100)
-    _insert_video(connection, "high", 101)
+    _insert_video(connection, "zero", 0)
+    _insert_video(connection, "one", 1)
+    _insert_video(connection, "hundred", 100)
 
     client = api.app.test_client()
-    seen = set()
-    for _ in range(40):
-        payload = client.get("/current-video").get_json()
-        seen.add(payload["id"])
+    seen = {client.get("/current-video").get_json()["id"] for _ in range(40)}
 
-    assert seen <= {"low", "mid"}
-    assert "high" not in seen
+    assert seen == {"zero"}
+
+
+def test_too_young_videos_are_not_served(connection):
+    _reset_pool()
+    _insert_video(connection, "young", 0, age_hours=1)
+    _insert_video(connection, "old_enough", 0, age_hours=3)
+
+    client = api.app.test_client()
+    seen = {client.get("/current-video").get_json()["id"] for _ in range(30)}
+
+    assert seen == {"old_enough"}
+
+
+def test_shorts_are_excluded(connection):
+    _reset_pool()
+    _insert_video(connection, "short", 0, duration=45)
+    _insert_video(connection, "borderline", 0, duration=180)
+    _insert_video(connection, "long", 0, duration=181)
+    _insert_video(connection, "unknown", 0, duration=None)
+
+    client = api.app.test_client()
+    seen = {client.get("/current-video").get_json()["id"] for _ in range(40)}
+
+    assert seen == {"long"}
 
 
 def test_stale_videos_are_not_served(connection):
     _reset_pool()
-    _insert_video(connection, "fresh", 0, age_hours=1)
+    _insert_video(connection, "fresh", 0, age_hours=3)
     _insert_video(connection, "stale", 0, age_hours=500)
 
     client = api.app.test_client()
@@ -100,18 +122,6 @@ def test_health_reports_pool_and_channels(connection):
 
     assert payload["status"] == "healthy"
     assert payload["pool_size"] >= 1
-
-
-def test_weighting_prefers_zero_view_videos(connection):
-    _reset_pool()
-    _insert_video(connection, "zero", 0)
-    _insert_video(connection, "hundred", 100)
-
-    counts = {"zero": 0, "hundred": 0}
-    for _ in range(600):
-        counts[api.pool.pick()["id"]] += 1
-
-    assert counts["zero"] > counts["hundred"] * 5
 
 
 def test_index_serves_frontend(connection):
