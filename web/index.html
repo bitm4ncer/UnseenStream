@@ -20,6 +20,13 @@
     <div id="overlay">
       <div class="action-rail">
         <button id="heart-btn" onclick="toggleSave()" title="Save video" aria-label="Save video">♡</button>
+        <button id="download-btn" onclick="downloadCurrent()" title="Download video" aria-label="Download video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12"></path>
+            <path d="M7 10l5 5 5-5"></path>
+            <path d="M4 19h16"></path>
+          </svg>
+        </button>
         <button id="library-btn" onclick="openSaved()" title="Saved videos" aria-label="Saved videos">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>

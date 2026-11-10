@@ -437,6 +437,7 @@ function loadVideo(video, direction = 'next') {
     }
 
     updateHeartButton();
+    updateDownloadButton();
     updateNavigationButtons();
     preloadUpcoming();
 
@@ -604,6 +605,71 @@ function updateHeartButton() {
   const heartBtn = document.getElementById('heart-btn');
   heartBtn.textContent = isSaved ? '♥' : '♡';
   heartBtn.classList.toggle('saved', isSaved);
+}
+
+// Download nur fuer archive.org: dort sind die Dateien oeffentlich und
+// direkt abrufbar. YouTube bietet keine Datei-URL (und erlaubt es nicht).
+function updateDownloadButton() {
+  const button = document.getElementById('download-btn');
+  if (!button) return;
+
+  const canDownload =
+    !!currentVideo &&
+    currentVideo.provider === 'archive' &&
+    !!currentVideo.mediaUrl;
+
+  button.disabled = !canDownload;
+  button.title = canDownload
+    ? 'Download video'
+    : 'Only archive.org videos can be downloaded';
+}
+
+function downloadFileName(title) {
+  const cleaned = (title || 'video')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return `${cleaned || 'video'}.mp4`;
+}
+
+async function downloadCurrent() {
+  if (!currentVideo || currentVideo.provider !== 'archive' || !currentVideo.mediaUrl) {
+    return;
+  }
+
+  const button = document.getElementById('download-btn');
+  const url = currentVideo.mediaUrl;
+  const filename = downloadFileName(currentVideo.snippet.title);
+
+  if (button) {
+    button.disabled = true;
+    button.title = 'Downloading…';
+  }
+
+  try {
+    // CORS erlaubt den direkten Abruf; als Blob speichern erzwingt den
+    // Download auch bei fremder Origin.
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  } catch (error) {
+    console.warn('Download fehlgeschlagen, oeffne Datei direkt:', error);
+    window.open(url, '_blank', 'noopener');
+  } finally {
+    updateDownloadButton();
+  }
 }
 
 function getSavedVideos() {

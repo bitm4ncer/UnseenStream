@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   players for YouTube, hidden `<video>` elements for archive files).
 - Timeline with a draggable playhead above the footer, working for both
   providers; arrow keys seek when the timeline has focus.
+- Download button for archive.org items: fetches the public MP4 and saves it
+  via a blob URL. Disabled for YouTube, which exposes no file and does not
+  allow downloading.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

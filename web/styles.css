@@ -284,6 +284,20 @@ body:not(.controls-visible) #overlay {
   height: 19px;
 }
 
+#download-btn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.action-rail button:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
+.action-rail button:disabled:hover {
+  background: var(--surface-1);
+}
+
 /* ---------- Bottom bar ------------------------------------ */
 
 /* Timeline / scrubber */
