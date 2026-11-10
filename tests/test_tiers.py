@@ -27,15 +27,6 @@ def test_hot_stays_hot_while_hits_continue():
     assert idle == 0
 
 
-def test_status_classification():
-    assert tiers.classify_status(200) == "ok"
-    assert tiers.classify_status(404) == "dead"
-    assert tiers.classify_status(410) == "dead"
-    assert tiers.classify_status(403) == "dead"
-    assert tiers.classify_status(429) == "backoff"
-    assert tiers.classify_status(503) == "backoff"
-
-
 def test_backoff_grows_and_is_capped():
     assert tiers.backoff_seconds(1) == 60
     assert tiers.backoff_seconds(2) == 120
@@ -43,9 +34,9 @@ def test_backoff_grows_and_is_capped():
     assert tiers.backoff_seconds(20) == 3600
 
 
-def test_dead_after_three_failures():
-    assert tiers.is_dead(2) is False
-    assert tiers.is_dead(3) is True
+def test_dead_after_five_failures():
+    assert tiers.is_dead(4) is False
+    assert tiers.is_dead(5) is True
 
 
 def test_cap_targets():

@@ -114,10 +114,10 @@ def test_known_video_updates_views(connection):
     ).fetchone()[0] == 180
 
 
-def test_failure_marks_channel_dead_after_three(connection):
-    channel = insert_channel(connection, fail_streak=2)
+def test_failure_marks_channel_dead_after_five(connection):
+    channel = insert_channel(connection, fail_streak=4)
 
-    poller._apply_failure(connection, channel, 3)
+    poller._apply_failure(connection, channel, 5)
     connection.commit()
 
     row = connection.execute("SELECT * FROM channels WHERE id = 'UCtest'").fetchone()

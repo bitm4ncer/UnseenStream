@@ -249,10 +249,13 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
 
         failed += 1
         fail_streak = channel["fail_streak"] + 1
-        if kind == "http":
-            outcome = tiers.classify_status(int(payload))
-            if outcome == "dead":
-                fail_streak = max(fail_streak, config.DEAD_AFTER_FAILS)
+        logger.info(
+            "Feed %s fehlgeschlagen (%s: %s), Versuch %d",
+            channel_id,
+            kind,
+            str(payload)[:80],
+            fail_streak,
+        )
         _apply_failure(conn, channel, fail_streak)
 
     conn.commit()

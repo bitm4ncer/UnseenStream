@@ -77,8 +77,10 @@ Erfolg heißt:
 | `us-poller` | RSS-Polling nach Tier, Kandidaten-Upsert, Tier-Pflege | 256 MB, 0,5 CPU |
 | `us-api` | Auslieferung, Health, Stats | 256 MB, 0,5 CPU |
 
-Das Frontend läuft in keinem eigenen Container: Caddy serviert die
-statischen Dateien direkt aus einem Read-only-Bind-Mount.
+Das Frontend läuft in keinem eigenen Container: `us-api` liefert die
+statischen Dateien aus `web/` mit aus. Dadurch braucht der bestehende
+Caddy-Container nur einen neuen Site-Block und ein `caddy reload` – kein
+Neustart, keine Änderung an fremden Volumes.
 
 Alle drei Rollen nutzen dasselbe Image und unterscheiden sich nur im
 Startkommando. Die Kommunikation läuft ausschließlich über die SQLite-Datei
@@ -245,13 +247,7 @@ fliegt raus.
 ```
 unseenstream.bitmancer.net {
 	encode zstd gzip
-	handle /current-video* { reverse_proxy us-api:8000 }
-	handle /stats*         { reverse_proxy us-api:8000 }
-	handle /health         { reverse_proxy us-api:8000 }
-	handle {
-		root * /srv/unseenstream
-		file_server
-	}
+	reverse_proxy us-api:8000
 }
 ```
 

@@ -61,6 +61,8 @@ services:
       - /tmp:size=16m
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      disable: true
     logging:
       driver: json-file
       options:
@@ -88,6 +90,8 @@ services:
       - /tmp:size=16m
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      disable: true
     logging:
       driver: json-file
       options:

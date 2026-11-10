@@ -34,17 +34,6 @@ def apply_poll_result(
     return tier, hit_streak, polls_since_hit
 
 
-def classify_status(status_code: int) -> str:
-    """Ordnet einen HTTP-Status einem Fehlerfall zu."""
-    if status_code in (404, 410):
-        return "dead"
-    if status_code == 429 or 500 <= status_code < 600:
-        return "backoff"
-    if 400 <= status_code < 500:
-        return "dead"
-    return "ok"
-
-
 def backoff_seconds(fail_streak: int) -> int:
     """Exponentieller Backoff, gedeckelt bei einer Stunde."""
     return min(3600, 60 * (2 ** max(0, fail_streak - 1)))
