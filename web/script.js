@@ -61,6 +61,7 @@ async function fetchNextVideo() {
     return {
       id: { videoId: video.id },
       provider: video.provider || 'youtube',
+      mediaUrl: video.mediaUrl || null,
       snippet: {
         title: video.title,
         channelTitle: video.channelTitle,
@@ -215,12 +216,11 @@ function loadVideo(video, direction = 'next') {
   const videoId = video.id.videoId;
   const isArchive = video.provider === 'archive';
   const playerElement = document.getElementById('player');
-  const archivePlayer = document.getElementById('archive-player');
+  const nativePlayer = document.getElementById('native-player');
   currentProvider = video.provider || 'youtube';
 
   const playPauseBtn = document.getElementById('play-pause-btn');
   if (playPauseBtn) {
-    playPauseBtn.disabled = isArchive;
     playPauseBtn.classList.remove('playing');
   }
 
@@ -234,6 +234,11 @@ function loadVideo(video, direction = 'next') {
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
     if (isArchive) {
+      if (!video.mediaUrl) {
+        console.warn('Archive-Item ohne Medien-URL:', videoId);
+        nextVideo();
+        return;
+      }
       // YouTube-iframe weiterspielen lassen waere ein Ton-Bug: hart stoppen.
       if (player && player.stopVideo) {
         try {
@@ -243,13 +248,16 @@ function loadVideo(video, direction = 'next') {
         }
       }
       document.body.classList.add('archive-mode');
-      if (archivePlayer) {
-        archivePlayer.src = `https://archive.org/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+      if (nativePlayer) {
+        nativePlayer.src = video.mediaUrl;
+        nativePlayer.play().catch(() => {});
       }
     } else {
       document.body.classList.remove('archive-mode');
-      if (archivePlayer) {
-        archivePlayer.src = 'about:blank';
+      if (nativePlayer) {
+        nativePlayer.pause();
+        nativePlayer.removeAttribute('src');
+        nativePlayer.load();
       }
       playerElement.style.visibility = 'visible';
       try {
@@ -269,6 +277,11 @@ function loadVideo(video, direction = 'next') {
     document.getElementById('video-title').textContent = title;
     document.getElementById('video-stats').textContent =
       `${viewCount.toLocaleString()} views • ${channelName}`;
+
+    const sourceEl = document.getElementById('video-source');
+    if (sourceEl) {
+      sourceEl.textContent = isArchive ? 'Archive' : 'YouTube';
+    }
 
     // Mark this video as viewed (for cache/deduplication)
     viewedVideos.add(videoId);
@@ -426,6 +439,8 @@ function toggleSave() {
     // Add to saved
     savedVideos.push({
       id: videoId,
+      provider: currentVideo.provider || 'youtube',
+      mediaUrl: currentVideo.mediaUrl || null,
       title: currentVideo.snippet.title,
       channelName: currentVideo.snippet.channelTitle,
       thumbnail: currentVideo.snippet.thumbnails.medium.url,
@@ -515,9 +530,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function togglePlayPause() {
   if (currentProvider === 'archive') {
-    // Der archive.org-iframe gehoert einer anderen Origin - keine Steuerung.
+    const native = document.getElementById('native-player');
+    if (!native || !native.src) return;
+    if (native.paused) {
+      native.play().catch(() => {});
+    } else {
+      native.pause();
+    }
     return;
   }
+
   if (!player || !player.getPlayerState) return;
 
   const state = player.getPlayerState();
@@ -534,6 +556,7 @@ function togglePlayPause() {
 
 // Update play/pause button state when player state changes
 function updatePlayPauseButton() {
+  if (currentProvider === 'archive') return; // steuert der native Player
   if (!player || !player.getPlayerState) return;
 
   const state = player.getPlayerState();
@@ -594,9 +617,26 @@ function playVideo(videoId) {
   if (video) {
     currentIndex = videoQueue.indexOf(video);
     loadVideo(video);
-  } else {
-    player.loadVideoById(videoId);
+    return;
   }
+
+  const saved = getSavedVideos().find(v => v.id === videoId);
+  if (saved && saved.provider === 'archive') {
+    loadVideo({
+      id: { videoId: saved.id },
+      provider: 'archive',
+      mediaUrl: saved.mediaUrl || null,
+      snippet: {
+        title: saved.title,
+        channelTitle: saved.channelName,
+        thumbnails: { medium: { url: saved.thumbnail } },
+      },
+      statistics: { viewCount: String(saved.viewCount || 0) },
+    });
+    return;
+  }
+
+  player.loadVideoById(videoId);
 }
 
 // Close modals on background click
@@ -628,6 +668,9 @@ function closeWelcome() {
 
 // Check if first visit
 function checkFirstVisit() {
+  // Direktlink ohne Willkommensdialog, z. B. zum Teilen eines Einstiegs.
+  if (new URLSearchParams(location.search).get('welcome') === '0') return;
+
   const hasVisited = localStorage.getItem('hasVisited');
   if (!hasVisited) {
     // Wait a moment for the page to settle, then show welcome
@@ -662,9 +705,11 @@ function setSource(source) {
   isLoading = false;
 
   document.body.classList.remove('archive-mode');
-  const archivePlayer = document.getElementById('archive-player');
-  if (archivePlayer) {
-    archivePlayer.src = 'about:blank';
+  const nativePlayer = document.getElementById('native-player');
+  if (nativePlayer) {
+    nativePlayer.pause();
+    nativePlayer.removeAttribute('src');
+    nativePlayer.load();
   }
 
   fetchVideos();
@@ -675,6 +720,34 @@ document.querySelectorAll('#source-toggle button').forEach((button) => {
 });
 
 window.addEventListener('DOMContentLoaded', updateSourceButtons);
+
+// ============================================
+// Native player (archive.org files)
+// ============================================
+
+const nativePlayerEl = document.getElementById('native-player');
+
+if (nativePlayerEl) {
+  nativePlayerEl.addEventListener('play', () => {
+    const btn = document.getElementById('play-pause-btn');
+    if (btn) btn.classList.add('playing');
+  });
+
+  nativePlayerEl.addEventListener('pause', () => {
+    const btn = document.getElementById('play-pause-btn');
+    if (btn) btn.classList.remove('playing');
+  });
+
+  nativePlayerEl.addEventListener('ended', () => {
+    if (isAutoplayEnabled) nextVideo();
+  });
+
+  nativePlayerEl.addEventListener('error', () => {
+    if (!nativePlayerEl.currentSrc) return;
+    console.warn('Archive-Video konnte nicht geladen werden');
+    nextVideo();
+  });
+}
 
 // ============================================
 // Initialization

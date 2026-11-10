@@ -13,7 +13,15 @@ def _doc(identifier="item1", downloads=0, title="Titel"):
 
 def test_discover_inserts_archive_item(connection, monkeypatch):
     monkeypatch.setattr(archive, "search_recent", lambda limit=None: [_doc()])
-    monkeypatch.setattr(archive, "fetch_metadata", lambda ident: {"duration_s": 600, "size": 1})
+    monkeypatch.setattr(
+        archive,
+        "fetch_metadata",
+        lambda ident: {
+            "duration_s": 600,
+            "size": 1,
+            "media_url": f"https://archive.org/download/{ident}/video.mp4",
+        },
+    )
     monkeypatch.setattr(archive.time, "sleep", lambda seconds: None)
 
     stats = archive.discover(connection)
@@ -24,6 +32,7 @@ def test_discover_inserts_archive_item(connection, monkeypatch):
     assert row["duration_s"] == 600
     assert row["views"] == 0
     assert row["source"] == "archive"
+    assert row["media_url"].endswith("/video.mp4")
 
 
 def test_discover_skips_items_without_video(connection, monkeypatch):
@@ -41,9 +50,10 @@ def test_discover_refreshes_known_items(connection, monkeypatch):
     connection.execute(
         """
         INSERT INTO videos (id, title, views, published_at, discovered_at,
-                            last_seen, source, provider, duration_s)
+                            last_seen, source, provider, duration_s, media_url)
         VALUES ('known', 'T', 0, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z',
-                '2026-11-10T00:00:00Z', 'archive', 'archive', 600)
+                '2026-11-10T00:00:00Z', 'archive', 'archive', 600,
+                'https://archive.org/download/known/v.mp4')
         """
     )
     connection.commit()
@@ -61,6 +71,37 @@ def test_discover_refreshes_known_items(connection, monkeypatch):
     assert connection.execute(
         "SELECT views FROM videos WHERE id = 'known'"
     ).fetchone()[0] == 5
+
+
+def test_discover_backfills_media_url(connection, monkeypatch):
+    connection.execute(
+        """
+        INSERT INTO videos (id, title, views, published_at, discovered_at,
+                            last_seen, source, provider, duration_s)
+        VALUES ('old', 'T', 0, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z',
+                '2026-11-10T00:00:00Z', 'archive', 'archive', 600)
+        """
+    )
+    connection.commit()
+
+    monkeypatch.setattr(
+        archive, "search_recent", lambda limit=None: [_doc("old")]
+    )
+    monkeypatch.setattr(
+        archive,
+        "fetch_metadata",
+        lambda ident: {
+            "duration_s": 600,
+            "size": 1,
+            "media_url": f"https://archive.org/download/{ident}/v.mp4",
+        },
+    )
+    monkeypatch.setattr(archive.time, "sleep", lambda seconds: None)
+
+    archive.discover(connection)
+
+    row = connection.execute("SELECT media_url FROM videos WHERE id = 'old'").fetchone()
+    assert row["media_url"].endswith("/v.mp4")
 
 
 def test_channel_title_prefers_uploader():

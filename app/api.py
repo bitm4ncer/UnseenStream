@@ -44,8 +44,9 @@ class CandidatePool:
             conn = db.connect()
             query = (
                 "SELECT id, title, channel_title, thumbnail, views, "
-                "published_at, provider "
-                "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0"
+                "published_at, provider, media_url "
+                "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0 "
+                "AND (provider != 'archive' OR media_url IS NOT NULL)"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
 
@@ -185,6 +186,7 @@ def current_video():
             "viewCount": video["views"],
             "publishedAt": video["published_at"],
             "provider": video["provider"],
+            "mediaUrl": video["media_url"],
         }
     )
 

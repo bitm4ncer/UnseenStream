@@ -7,100 +7,97 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#08080a">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-  
-  <!-- Video Container -->
-  <div id="video-container">
-    <div id="loading">Finding random videos...</div>
+<body class="controls-visible">
+
+  <main id="video-container">
+    <div id="loading">Suchen…</div>
     <div id="player" style="visibility: hidden;"></div>
-    <iframe id="archive-player" title="archive.org" allow="autoplay; fullscreen" allowfullscreen></iframe>
-    <div id="preload-player" style="display: none;"></div>
-    
-  </div>
+    <video id="native-player" playsinline preload="metadata"></video>
+    <div id="preload-player"></div>
 
-  <!-- Controls (below video) -->
-  <div id="controls">
-    <!-- Left: Video Info -->
-    <div id="video-info">
-      <img id="brand-mark" src="/favicon.svg" alt="UnseenStream" width="24" height="24">
-      <div id="video-info-text">
-        <div id="video-title">Loading...</div>
-        <div id="video-stats"></div>
+    <div id="overlay">
+      <div id="video-info">
+        <img id="brand-mark" src="/favicon.svg" alt="" width="22" height="22">
+        <div id="video-info-text">
+          <h1 id="video-title">Loading…</h1>
+          <div class="meta-row">
+            <span id="video-source" class="source-badge">YouTube</span>
+            <p id="video-stats"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-rail">
+        <button id="heart-btn" onclick="toggleSave()" title="Save video" aria-label="Save video">♡</button>
+        <button id="library-btn" onclick="openSaved()" title="Saved videos" aria-label="Saved videos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
-    <!-- Center: Navigation Buttons -->
-    <div class="nav-buttons">
-      <button class="nav-btn" id="prev-btn" onclick="previousVideo()" title="Previous video (← or ↓)">Prev</button>
-      <button id="play-pause-btn" class="nav-btn" onclick="togglePlayPause()" title="Play/Pause (Space)">
-        <svg class="play-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-        <svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="6" y="4" width="4" height="16"></rect>
-          <rect x="14" y="4" width="4" height="16"></rect>
-        </svg>
-      </button>
-      <button class="nav-btn" id="next-btn" onclick="nextVideo()" title="Next video (→ or ↑)">Next</button>
-    </div>
-
-    <!-- Right: Action Buttons -->
-    <div class="action-buttons">
-      <div id="source-toggle" role="group" aria-label="Quelle">
-        <button type="button" data-source="all" class="active">Alle</button>
-        <button type="button" data-source="youtube">YouTube</button>
-        <button type="button" data-source="archive">Archive</button>
+    <div id="controls">
+      <div class="controls-side controls-left">
+        <div id="source-toggle" role="group" aria-label="Source">
+          <button type="button" data-source="all" class="active">All</button>
+          <button type="button" data-source="youtube">YouTube</button>
+          <button type="button" data-source="archive">Archive</button>
+        </div>
       </div>
-      <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay: nächstes Video automatisch">Auto</button>
-      <button id="heart-btn" onclick="toggleSave()" title="Save video">♡</button>
-      <button id="library-btn" onclick="openSaved()" title="Saved videos">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
-      </button>
+
+      <div class="nav-buttons">
+        <button id="prev-btn" class="icon-btn" onclick="previousVideo()" title="Previous (←)" aria-label="Previous video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+        </button>
+        <button id="play-pause-btn" class="play-btn" onclick="togglePlayPause()" title="Play / Pause (Space)" aria-label="Play or pause">
+          <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        </button>
+        <button id="next-btn" class="icon-btn" onclick="nextVideo()" title="Next (→)" aria-label="Next video">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 6l6 6-6 6"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="controls-side controls-right">
+        <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay next video">Autoplay</button>
+      </div>
     </div>
-  </div>
 
-  <!-- Fade Controls Button (fixed position) -->
-  <button id="fade-btn" onclick="toggleControls()" title="Hide controls">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M6 9l6 6 6-6"/>
-    </svg>
-  </button>
+    <button id="fade-btn" onclick="toggleControls()" title="Hide controls" aria-label="Hide controls">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+  </main>
 
-  <!-- Welcome Info Modal -->
   <div id="welcome-modal" class="modal">
-    <div class="modal-content welcome-content">
-      <div class="modal-header">
-        <h2>Unseen Stream</h2>
-        <button class="close-btn" onclick="closeWelcome()">×</button>
-      </div>
-      <div class="welcome-body">
-        <p class="welcome-stat">Every second, over 8 hours of video are uploaded to YouTube.</p>
-        <p class="welcome-text">Most of these videos will never be seen. They're personal moments, spontaneous captures, unintended uploads—raw glimpses into different realities around the world.</p>
-        <p class="welcome-text">Instead of algorithm-driven content designed to perform, Unseen Stream shows you the unfiltered internet: videos with zero to few views, uploaded by real people living their lives.</p>
-        <p class="welcome-text">Swipe up/down or use arrow keys to explore authentic moments from across the globe.</p>
-        <button class="welcome-btn" onclick="closeWelcome()">Dive in</button>
-      </div>
+    <div class="modal-content">
+      <h2>Every video here has exactly one viewer.</h2>
+      <p class="lede">Most uploads on YouTube and archive.org are never seen by anyone. Unseen Stream shows them to you before someone else opens them, then takes them out of the feed.</p>
+      <p class="body">Swipe up for the next one. What you have seen is gone for everyone else.</p>
+      <button class="primary-btn" onclick="closeWelcome()">Start watching</button>
     </div>
   </div>
 
-  <!-- Saved Videos Modal -->
   <div id="saved-modal" class="modal">
     <div class="modal-content">
-      <div class="modal-header">
-        <h2>Saved Videos (<span id="saved-count">0</span>)</h2>
-        <button class="close-btn" onclick="closeSaved()">×</button>
+      <div class="modal-head">
+        <h2>Saved <span id="saved-count">0</span></h2>
+        <button class="close-btn" onclick="closeSaved()" aria-label="Close">×</button>
       </div>
       <div id="saved-list" class="video-list"></div>
     </div>
   </div>
 
-  <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="script.js"></script>
 </body>

@@ -5,13 +5,18 @@ from app import api, db
 
 def _insert_video(conn, video_id, views, age_hours=3, duration=600, provider="youtube"):
     now = db.utcnow()
+    media_url = (
+        f"https://archive.org/download/{video_id}/v.mp4"
+        if provider == "archive"
+        else None
+    )
     conn.execute(
         """
         INSERT INTO videos (id, channel_id, channel_title, title, thumbnail,
                             views, published_at, discovered_at, last_seen,
-                            source, duration_s, provider)
+                            source, duration_s, provider, media_url)
         VALUES (?, 'UCtest', 'Kanal', ?, 'https://example.invalid/t.jpg', ?,
-                ?, ?, ?, 'rss', ?, ?)
+                ?, ?, ?, 'rss', ?, ?, ?)
         """,
         (
             video_id,
@@ -22,6 +27,7 @@ def _insert_video(conn, video_id, views, age_hours=3, duration=600, provider="yo
             db.iso(now),
             duration,
             provider,
+            media_url,
         ),
     )
     conn.commit()

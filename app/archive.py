@@ -23,7 +23,8 @@ SEARCH_URL = "https://archive.org/advancedsearch.php"
 META_URL = "https://archive.org/metadata/{identifier}"
 THUMB_URL = "https://archive.org/services/img/{identifier}"
 
-VIDEO_FILE = re.compile(r"\.(mp4|webm|ogv|mkv|mov|avi|m4v)$", re.IGNORECASE)
+VIDEO_FILE = re.compile(r"\.(mp4|webm|ogv|m4v)$", re.IGNORECASE)
+DOWNLOAD_URL = "https://archive.org/download/{identifier}/{path}"
 
 _session: requests.Session | None = None
 
@@ -72,7 +73,7 @@ def search_recent(hours: int | None = None, limit: int | None = None) -> list[di
 
 
 def fetch_metadata(identifier: str) -> dict | None:
-    """Laufzeit und Groesse der groessten Videodatei. None = kein Video."""
+    """Laufzeit, Groesse und Download-URL der besten abspielbaren Datei."""
     try:
         response = _http().get(META_URL.format(identifier=identifier), timeout=20)
     except requests.RequestException as exc:
@@ -95,7 +96,14 @@ def fetch_metadata(identifier: str) -> dict | None:
     if not files:
         return None
 
-    files.sort(key=lambda item: int(item.get("size") or 0), reverse=True)
+    # MP4 zuerst (beste Browser-Unterstuetzung), dann nach Groesse.
+    files.sort(
+        key=lambda item: (
+            item.get("name", "").lower().endswith(".mp4"),
+            int(item.get("size") or 0),
+        ),
+        reverse=True,
+    )
     main = files[0]
 
     length = main.get("length")
@@ -106,9 +114,14 @@ def fetch_metadata(identifier: str) -> dict | None:
         except (TypeError, ValueError):
             duration = None
 
+    path = "/".join(
+        requests.utils.quote(part) for part in main.get("name", "").split("/")
+    )
+
     return {
         "duration_s": duration,
         "size": int(main.get("size") or 0),
+        "media_url": DOWNLOAD_URL.format(identifier=identifier, path=path),
     }
 
 
@@ -127,26 +140,39 @@ def discover(conn, limit: int | None = None) -> dict:
     added = 0
     refreshed = 0
 
-    for index, doc in enumerate(docs, start=1):
-        if index % 25 == 0:
-            conn.commit()
+    for doc in docs:
         identifier = doc.get("identifier")
         if not identifier:
             continue
 
         known = conn.execute(
-            "SELECT id FROM videos WHERE id = ?", (identifier,)
+            "SELECT id, media_url FROM videos WHERE id = ?", (identifier,)
         ).fetchone()
 
         downloads = int(doc.get("downloads") or 0)
 
         if known:
-            # Downloads koennen inzwischen gestiegen sein: nachziehen.
-            conn.execute(
-                "UPDATE videos SET views = ?, last_seen = ? WHERE id = ?",
-                (downloads, now, identifier),
-            )
-            refreshed += 1
+            if known["media_url"]:
+                # Downloads koennen inzwischen gestiegen sein: nachziehen.
+                conn.execute(
+                    "UPDATE videos SET views = ?, last_seen = ? WHERE id = ?",
+                    (downloads, now, identifier),
+                )
+                conn.commit()
+                refreshed += 1
+                continue
+
+            # Alte Zeilen ohne direkte Medien-URL nachruesten.
+            meta = fetch_metadata(identifier)
+            time.sleep(config.ARCHIVE_DELAY)
+            if meta:
+                conn.execute(
+                    "UPDATE videos SET views = ?, last_seen = ?, duration_s = ?, "
+                    "media_url = ? WHERE id = ?",
+                    (downloads, now, meta["duration_s"], meta["media_url"], identifier),
+                )
+                conn.commit()
+                refreshed += 1
             continue
 
         meta = fetch_metadata(identifier)
@@ -159,8 +185,8 @@ def discover(conn, limit: int | None = None) -> dict:
             INSERT INTO videos
                 (id, channel_id, channel_title, title, thumbnail, views,
                  published_at, discovered_at, last_seen, source, duration_s,
-                 provider)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'archive', ?, 'archive')
+                 provider, media_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'archive', ?, 'archive', ?)
             ON CONFLICT(id) DO NOTHING
             """,
             (
@@ -174,8 +200,10 @@ def discover(conn, limit: int | None = None) -> dict:
                 now,
                 now,
                 meta["duration_s"],
+                meta["media_url"],
             ),
         )
+        conn.commit()
         added += 1
 
     conn.commit()

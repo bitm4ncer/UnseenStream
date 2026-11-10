@@ -30,7 +30,7 @@ Internet Archive  ──0 units────▶  archive     ◀─────�
 |---|---|---|
 | `us-discoverer` | 4 searches per hour, enriched with `videos.list`, writes channels to the watchlist | ~9,700 units/day |
 | `us-poller` | polls channel RSS feeds (views included), keeps candidates fresh | no API quota |
-| `archive` | pulls fresh `mediatype:movies` items with `downloads: 0` from archive.org | no API key, polite rate limit |
+| `archive` | pulls fresh `mediatype:movies` items with `downloads: 0` from archive.org, stores the direct MP4 URL | no API key, polite rate limit |
 | `us-api` | weighted random selection, `/current-video`, `/health`, `/stats` | none |
 
 Both providers land in the same `videos` table; the API filters by the

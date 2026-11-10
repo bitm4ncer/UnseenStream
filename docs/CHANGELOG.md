@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   via the footer toggle.
 - Globally consumed pool: a video is marked `served` atomically on delivery
   and never shown to a second visitor.
+- New full-bleed UI: overlay controls, flat surfaces, no borders, a source
+  badge on every video, and a native `<video>` player for archive.org files
+  so both providers share the same controls.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

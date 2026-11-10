@@ -81,6 +81,8 @@ def _migrate(conn: sqlite3.Connection, db_path: str) -> None:
             statements.append(
                 "ALTER TABLE videos ADD COLUMN provider TEXT NOT NULL DEFAULT 'youtube'"
             )
+        if "media_url" not in columns:
+            statements.append("ALTER TABLE videos ADD COLUMN media_url TEXT")
 
         for statement in statements:
             try:
