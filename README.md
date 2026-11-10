@@ -17,6 +17,8 @@ YouTube Data API  ──100 units──▶  discoverer  ──▶  channels (SQL
                                                         │
 YouTube RSS       ──0 units────▶  poller      ◀────────┘
                                                         │
+Internet Archive  ──0 units────▶  archive     ◀────────┘
+                                                        │
                                                   videos (SQLite)
                                                         │
                                       api  ◀────────────┘
@@ -28,7 +30,12 @@ YouTube RSS       ──0 units────▶  poller      ◀─────�
 |---|---|---|
 | `us-discoverer` | 4 searches per hour, enriched with `videos.list`, writes channels to the watchlist | ~9,700 units/day |
 | `us-poller` | polls channel RSS feeds (views included), keeps candidates fresh | no API quota |
+| `archive` | pulls fresh `mediatype:movies` items with `downloads: 0` from archive.org | no API key, polite rate limit |
 | `us-api` | weighted random selection, `/current-video`, `/health`, `/stats` | none |
+
+Both providers land in the same `videos` table; the API filters by the
+`source` field sent from the frontend (`all`, `youtube`, `archive`), which
+is also the toggle in the footer.
 
 Because RSS polling is free, a quota outage only pauses discovery — the feed
 keeps working. Channels are tiered by hit rate (`hot` 10 min, `warm` 1 h,
@@ -61,6 +68,9 @@ docker compose run --rm us-discoverer python -m app.cli seed \
 | `US_MIN_AGE_HOURS` | `2` | serving filter: ignore videos younger than this |
 | `US_MAX_AGE_HOURS` | `48` | serving filter: ignore videos older than this |
 | `US_MIN_DURATION_S` | `180` | serving filter: exclude Shorts / anything this short |
+| `US_ARCHIVE_ENABLED` | `1` | enable the archive.org source |
+| `US_ARCHIVE_LIMIT` | `200` | items per archive discovery run |
+| `US_ARCHIVE_INTERVAL` | `600` | seconds between archive runs |
 | `US_DAILY_QUOTA` | `9700` | API budget per Pacific day |
 | `US_SEARCHES_PER_HOUR` | `4` | discovery pace |
 | `US_HOT_INTERVAL` / `US_WARM_INTERVAL` / `US_COLD_INTERVAL` | `600` / `3600` / `21600` | poll intervals |

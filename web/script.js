@@ -17,6 +17,7 @@ let touchEndX = 0;
 let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
+let sourceFilter = localStorage.getItem('source_filter') || 'all';
 
 // Viewed videos tracking (to prevent duplicates)
 let viewedVideos = new Set(JSON.parse(localStorage.getItem('viewed_videos') || '[]'));
@@ -38,7 +39,10 @@ async function fetchNextVideo() {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ excluded_ids: excludedIds }),
+      body: JSON.stringify({
+        excluded_ids: excludedIds,
+        source: sourceFilter,
+      }),
       signal: AbortSignal.timeout(8000),
     });
 
@@ -55,6 +59,7 @@ async function fetchNextVideo() {
 
     return {
       id: { videoId: video.id },
+      provider: video.provider || 'youtube',
       snippet: {
         title: video.title,
         channelTitle: video.channelTitle,
@@ -147,7 +152,7 @@ function preloadNextVideo() {
   // Check if there's a next video to preload
   if (nextIndex < videoQueue.length) {
     const nextVideo = videoQueue[nextIndex];
-    if (nextVideo && preloadPlayer) {
+    if (nextVideo && preloadPlayer && nextVideo.provider !== 'archive') {
       try {
         // Use cueVideoById to preload without playing
         preloadPlayer.cueVideoById(nextVideo.id.videoId);
@@ -207,7 +212,9 @@ function loadVideo(video, direction = 'next') {
 
   currentVideo = video;
   const videoId = video.id.videoId;
+  const isArchive = video.provider === 'archive';
   const playerElement = document.getElementById('player');
+  const archivePlayer = document.getElementById('archive-player');
 
   // Determine slide direction
   const slideOutClass = direction === 'next' ? 'slide-out-up' : 'slide-out-down';
@@ -218,13 +225,24 @@ function loadVideo(video, direction = 'next') {
 
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
-    playerElement.style.visibility = 'visible';
-    try {
-      player.loadVideoById(videoId);
-    } catch (error) {
-      console.error('Error loading video:', error);
-      nextVideo();
-      return;
+    if (isArchive) {
+      document.body.classList.add('archive-mode');
+      if (archivePlayer) {
+        archivePlayer.src = `https://archive.org/embed/${encodeURIComponent(videoId)}?autoplay=1`;
+      }
+    } else {
+      document.body.classList.remove('archive-mode');
+      if (archivePlayer) {
+        archivePlayer.src = 'about:blank';
+      }
+      playerElement.style.visibility = 'visible';
+      try {
+        player.loadVideoById(videoId);
+      } catch (error) {
+        console.error('Error loading video:', error);
+        nextVideo();
+        return;
+      }
     }
 
     // Update UI
@@ -600,6 +618,45 @@ function checkFirstVisit() {
 }
 
 // ============================================
+// Source Filter (Alle / YouTube / Archive)
+// ============================================
+
+function updateSourceButtons() {
+  document.querySelectorAll('#source-toggle button').forEach((button) => {
+    button.classList.toggle('active', button.dataset.source === sourceFilter);
+  });
+}
+
+function setSource(source) {
+  if (!['all', 'youtube', 'archive'].includes(source)) return;
+  if (source === sourceFilter) return;
+
+  sourceFilter = source;
+  localStorage.setItem('source_filter', source);
+  updateSourceButtons();
+
+  // Warteschlange verwerfen, damit der Filter sofort greift.
+  videoQueue = [];
+  currentIndex = 0;
+  currentVideo = null;
+  isLoading = false;
+
+  document.body.classList.remove('archive-mode');
+  const archivePlayer = document.getElementById('archive-player');
+  if (archivePlayer) {
+    archivePlayer.src = 'about:blank';
+  }
+
+  fetchVideos();
+}
+
+document.querySelectorAll('#source-toggle button').forEach((button) => {
+  button.addEventListener('click', () => setSource(button.dataset.source));
+});
+
+window.addEventListener('DOMContentLoaded', updateSourceButtons);
+
+// ============================================
 // Initialization
 // ============================================
 
@@ -607,6 +664,8 @@ window.addEventListener('load', async () => {
   const loadingEl = document.getElementById('loading');
   loadingEl.classList.remove('hidden');
   loadingEl.textContent = 'Loading videos...';
+
+  updateSourceButtons();
 
   // Check for first visit
   checkFirstVisit();

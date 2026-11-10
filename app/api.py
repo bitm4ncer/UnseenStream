@@ -46,7 +46,8 @@ class CandidatePool:
 
             conn = db.connect()
             query = (
-                "SELECT id, title, channel_title, thumbnail, views, published_at "
+                "SELECT id, title, channel_title, thumbnail, views, "
+                "published_at, provider "
                 "FROM videos WHERE views <= ? AND duration_s > ?"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
@@ -75,20 +76,35 @@ class CandidatePool:
         self.refresh()
         return len(self._items)
 
-    def pick(self, excluded: set[str] | None = None) -> dict | None:
+    def pick(
+        self, excluded: set[str] | None = None, source: str | None = None
+    ) -> dict | None:
         self.refresh()
         items = self._items
         if not items:
             return None
 
-        weights = self._weights
-        if excluded:
-            index = [i for i, item in enumerate(items) if item["id"] not in excluded]
-            if index:
-                items = [items[i] for i in index]
-                weights = [weights[i] for i in index]
+        pairs = list(zip(items, self._weights))
+        wanted = source if source in ("youtube", "archive") else None
 
-        return random.choices(items, weights=weights, k=1)[0]
+        if wanted:
+            pairs = [(item, weight) for item, weight in pairs if item["provider"] == wanted]
+        if excluded:
+            remaining = [
+                (item, weight) for item, weight in pairs if item["id"] not in excluded
+            ]
+            if remaining:
+                pairs = remaining
+
+        if not pairs:
+            return None
+
+        chosen = random.choices(
+            [item for item, _ in pairs],
+            weights=[weight for _, weight in pairs],
+            k=1,
+        )[0]
+        return chosen
 
 
 pool = CandidatePool()
@@ -154,11 +170,13 @@ def health():
 @app.route("/current-video", methods=["GET", "POST"])
 def current_video():
     excluded: set[str] = set()
+    source = "all"
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         excluded = set(payload.get("excluded_ids") or [])
+        source = payload.get("source") or "all"
 
-    video = pool.pick(excluded)
+    video = pool.pick(excluded, source)
     if video is None:
         return (
             jsonify(
@@ -180,6 +198,7 @@ def current_video():
             "thumbnail": video["thumbnail"],
             "viewCount": video["views"],
             "publishedAt": video["published_at"],
+            "provider": video["provider"],
         }
     )
 
@@ -194,9 +213,16 @@ def stats():
             "WHERE alive = 1 GROUP BY tier"
         )
     }
+    providers = {
+        row["provider"]: row["count"]
+        for row in conn.execute(
+            "SELECT provider, COUNT(*) AS count FROM videos GROUP BY provider"
+        )
+    }
     return jsonify(
         {
             "pool_size": pool.size(),
+            "videos_by_provider": providers,
             "videos_total": conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0],
             "channels_by_tier": tiers,
             "quota_today": db.spent_today(conn),

@@ -3,15 +3,15 @@ from datetime import timedelta
 from app import api, db
 
 
-def _insert_video(conn, video_id, views, age_hours=3, duration=600):
+def _insert_video(conn, video_id, views, age_hours=3, duration=600, provider="youtube"):
     now = db.utcnow()
     conn.execute(
         """
         INSERT INTO videos (id, channel_id, channel_title, title, thumbnail,
                             views, published_at, discovered_at, last_seen,
-                            source, duration_s)
+                            source, duration_s, provider)
         VALUES (?, 'UCtest', 'Kanal', ?, 'https://example.invalid/t.jpg', ?,
-                ?, ?, ?, 'rss', ?)
+                ?, ?, ?, 'rss', ?, ?)
         """,
         (
             video_id,
@@ -21,6 +21,7 @@ def _insert_video(conn, video_id, views, age_hours=3, duration=600):
             db.iso(now),
             db.iso(now),
             duration,
+            provider,
         ),
     )
     conn.commit()
@@ -111,6 +112,40 @@ def test_all_excluded_falls_back_to_pool(connection):
     ).get_json()
 
     assert payload["id"] == "only"
+
+
+def test_source_filter_limits_provider(connection):
+    _reset_pool()
+    _insert_video(connection, "yt", 0, provider="youtube")
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+    ids = {
+        client.post("/current-video", json={"source": "archive"}).get_json()["id"]
+        for _ in range(20)
+    }
+
+    assert ids == {"ar"}
+
+
+def test_source_filter_empty_provider_returns_503(connection):
+    _reset_pool()
+    _insert_video(connection, "yt", 0, provider="youtube")
+
+    client = api.app.test_client()
+    response = client.post("/current-video", json={"source": "archive"})
+
+    assert response.status_code == 503
+
+
+def test_response_includes_provider(connection):
+    _reset_pool()
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+    payload = client.get("/current-video").get_json()
+
+    assert payload["provider"] == "archive"
 
 
 def test_health_reports_pool_and_channels(connection):

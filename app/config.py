@@ -85,3 +85,10 @@ API_USER_AGENT = os.environ.get("US_API_USER_AGENT", "UnseenStream/1.0")
 
 YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
 FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+
+# Internet Archive als zweite Quelle
+ARCHIVE_ENABLED = os.environ.get("US_ARCHIVE_ENABLED", "1") not in ("0", "false", "False")
+ARCHIVE_LIMIT = _int("US_ARCHIVE_LIMIT", 200)
+ARCHIVE_INTERVAL = _int("US_ARCHIVE_INTERVAL", 600)
+ARCHIVE_WINDOW_HOURS = _int("US_ARCHIVE_WINDOW_HOURS", 3)
+ARCHIVE_DELAY = _float("US_ARCHIVE_DELAY", 0.2)

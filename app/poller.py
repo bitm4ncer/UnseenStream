@@ -264,7 +264,7 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
             len(results),
         )
 
-    for channel_id, kind, payload in results:
+    for index, (channel_id, kind, payload) in enumerate(results, start=1):
         channel = by_id[channel_id]
         if kind == "ok":
             try:
@@ -273,10 +273,14 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
                 kind, payload = "error", str(exc)
             else:
                 new_videos += _apply_feed(conn, channel, feed)
+                if index % 25 == 0:
+                    conn.commit()
                 continue
 
         failed += 1
         if outage:
+            if index % 25 == 0:
+                conn.commit()
             continue
 
         fail_streak = channel["fail_streak"] + 1
@@ -288,6 +292,8 @@ def poll_cycle(conn, dry_run: bool = False) -> dict:
             fail_streak,
         )
         _apply_failure(conn, channel, fail_streak)
+        if index % 25 == 0:
+            conn.commit()
 
     conn.commit()
     enforce_caps(conn)
@@ -315,6 +321,19 @@ def _enrich_forever() -> None:
         time.sleep(30)
 
 
+def _archive_forever() -> None:
+    """Internet-Archive-Kandidaten nachziehen (kein API-Quota)."""
+    from . import archive
+
+    conn = db.connect()
+    while True:
+        try:
+            archive.discover(conn)
+        except Exception:  # pragma: no cover - nur Logging
+            logger.exception("Archive-Discovery fehlgeschlagen")
+        time.sleep(config.ARCHIVE_INTERVAL)
+
+
 def run(once: bool = False, dry_run: bool = False) -> None:
     from . import enrich
 
@@ -327,6 +346,8 @@ def run(once: bool = False, dry_run: bool = False) -> None:
         return
 
     threading.Thread(target=_enrich_forever, daemon=True).start()
+    if config.ARCHIVE_ENABLED:
+        threading.Thread(target=_archive_forever, daemon=True).start()
 
     while True:
         stats = poll_cycle(conn, dry_run=dry_run)

@@ -16,6 +16,7 @@
   <div id="video-container">
     <div id="loading">Finding random videos...</div>
     <div id="player" style="visibility: hidden;"></div>
+    <iframe id="archive-player" title="archive.org" allow="autoplay; fullscreen" allowfullscreen></iframe>
     <div id="preload-player" style="display: none;"></div>
     
   </div>
@@ -48,6 +49,11 @@
 
     <!-- Right: Action Buttons -->
     <div class="action-buttons">
+      <div id="source-toggle" role="group" aria-label="Quelle">
+        <button type="button" data-source="all" class="active">Alle</button>
+        <button type="button" data-source="youtube">YouTube</button>
+        <button type="button" data-source="archive">Archive</button>
+      </div>
       <button id="heart-btn" onclick="toggleSave()" title="Save video">♡</button>
       <button id="library-btn" onclick="openSaved()" title="Saved videos">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

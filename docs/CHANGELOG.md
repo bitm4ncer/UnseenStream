@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   old, and longer than 180 seconds so Shorts never appear.
 - `enrich` job that backfills video durations (RSS does not carry them),
   sharing the API budget with discovery.
+- Internet Archive as a second source: fresh `mediatype:movies` items with
+  `downloads: 0`, served through archive.org's embed player and selectable
+  via the footer toggle.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

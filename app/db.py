@@ -59,7 +59,39 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 _local = threading.local()
-_schema_ready = False
+_schema_ready_for: str | None = None
+_migration_lock = threading.Lock()
+
+
+def _migrate(conn: sqlite3.Connection, db_path: str) -> None:
+    """Spalten nachziehen - einmal pro Prozess und Datei, robust gegen Races."""
+    global _schema_ready_for
+    if _schema_ready_for == db_path:
+        return
+
+    with _migration_lock:
+        if _schema_ready_for == db_path:
+            return
+
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(videos)")}
+        statements = []
+        if "duration_s" not in columns:
+            statements.append("ALTER TABLE videos ADD COLUMN duration_s INTEGER")
+        if "provider" not in columns:
+            statements.append(
+                "ALTER TABLE videos ADD COLUMN provider TEXT NOT NULL DEFAULT 'youtube'"
+            )
+
+        for statement in statements:
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError as exc:
+                # Ein anderer Container war schneller.
+                if "duplicate column" not in str(exc).lower():
+                    raise
+
+        conn.commit()
+        _schema_ready_for = db_path
 
 
 def utcnow() -> datetime:
@@ -108,13 +140,7 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
-
-    columns = {
-        row["name"] for row in conn.execute("PRAGMA table_info(videos)")
-    }
-    if "duration_s" not in columns:
-        conn.execute("ALTER TABLE videos ADD COLUMN duration_s INTEGER")
-
+    _migrate(conn, db_path)
     conn.commit()
 
     _local.conn = conn
