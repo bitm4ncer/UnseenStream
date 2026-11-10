@@ -313,6 +313,11 @@ body:not(.controls-visible) #overlay {
   transform: scale(0.94);
 }
 
+.action-rail button svg {
+  width: 19px;
+  height: 19px;
+}
+
 #heart-btn.saved {
   background: var(--accent);
 }
