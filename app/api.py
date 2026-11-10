@@ -24,7 +24,7 @@ from flask import (
     stream_with_context,
 )
 
-from . import config, db
+from . import config, db, youtube
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ def _revalidate_assets(response):
     return response
 
 _started_at = time.time()
+_recent_refresh: dict[str, float] = {}
 
 
 AGE_WEIGHT_CAP = 1825.0
@@ -415,6 +416,22 @@ def current_video():
 
     # Sofort global verbrauchen, damit kein zweiter Nutzer das Video bekommt.
     conn = db.connect()
+
+    # YouTube-Views veralten: beim Ausliefern frisch holen (1 Unit), damit
+    # die Anzeige stimmt und Videos mit Views aus dem Pool fallen.
+    if video["provider"] == "youtube" and db.remaining_quota(conn) > 100:
+        try:
+            fresh = youtube.fetch_views(conn, video["id"])
+        except Exception:  # noqa: BLE001 - Anzeige darf nie das Serving brechen
+            fresh = None
+
+        if fresh is not None and fresh != video["views"]:
+            conn.execute(
+                "UPDATE videos SET views = ? WHERE id = ?", (fresh, video["id"])
+            )
+            conn.commit()
+            video["views"] = fresh
+
     conn.execute(
         "UPDATE videos SET served = served + 1 WHERE id = ?", (video["id"],)
     )
@@ -491,6 +508,30 @@ def video_by_id(video_id):
     if row is None:
         return jsonify({"error": "not_found"}), 404
 
+    views = row["views"]
+    wants_refresh = request.args.get("refresh") in ("1", "true", "yes")
+
+    if (
+        wants_refresh
+        and row["provider"] == "youtube"
+        and db.remaining_quota(conn) > 100
+    ):
+        now = time.time()
+        # Nicht haeufiger als alle 20 s pro Video, egal wie viele Tabs fragen.
+        if now - _recent_refresh.get(video_id, 0) > 20:
+            _recent_refresh[video_id] = now
+            try:
+                fresh = youtube.fetch_views(conn, video_id)
+            except Exception:  # noqa: BLE001 - Anzeige darf nie brechen
+                fresh = None
+
+            if fresh is not None:
+                conn.execute(
+                    "UPDATE videos SET views = ? WHERE id = ?", (fresh, video_id)
+                )
+                conn.commit()
+                views = fresh
+
     return jsonify(
         {
             "id": row["id"],
@@ -498,7 +539,7 @@ def video_by_id(video_id):
             "channelId": row["channel_id"] or row["channel_title"],
             "channelTitle": row["channel_title"],
             "thumbnail": row["thumbnail"],
-            "viewCount": row["views"],
+            "viewCount": views,
             "publishedAt": row["published_at"],
             "provider": row["provider"],
             "mediaUrl": row["media_url"],

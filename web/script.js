@@ -485,6 +485,47 @@ function rememberChannel(video) {
   localStorage.setItem('recent_channels', JSON.stringify(recentChannels));
 }
 
+function renderStats(video) {
+  if (!video) return;
+
+  const statsEl = document.getElementById('video-stats');
+  if (!statsEl) return;
+
+  const channelName = video.snippet.channelTitle;
+  const viewCount = parseInt(video.statistics?.viewCount || 0);
+  const publishedAt = video.snippet.publishedAt;
+  const age = formatAge(publishedAt);
+
+  statsEl.textContent = age
+    ? `${viewCount.toLocaleString()} views • ${age} • ${channelName}`
+    : `${viewCount.toLocaleString()} views • ${channelName}`;
+  statsEl.title = publishedAt ? new Date(publishedAt).toLocaleString() : '';
+}
+
+// Views live nachziehen: YouTube zaehlt weiter, waehrend das Video laeuft.
+async function refreshCurrentViews() {
+  if (!currentVideo || currentProvider !== 'youtube') return;
+
+  try {
+    const response = await fetch(
+      `/video/${encodeURIComponent(currentVideo.id.videoId)}?refresh=1`,
+      { cache: 'no-store' }
+    );
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (typeof data.viewCount !== 'number') return;
+
+    currentVideo.statistics = currentVideo.statistics || {};
+    currentVideo.statistics.viewCount = String(data.viewCount);
+    renderStats(currentVideo);
+  } catch (error) {
+    /* still: der Zaehler ist kein kritischer Pfad */
+  }
+}
+
+setInterval(refreshCurrentViews, 60000);
+
 function loadVideo(video, direction = 'next') {
   if (!video) return;
 
@@ -554,18 +595,9 @@ function loadVideo(video, direction = 'next') {
 
     // Update UI
     const title = video.snippet.title;
-    const channelName = video.snippet.channelTitle;
-    const viewCount = parseInt(video.statistics?.viewCount || 0);
 
     document.getElementById('video-title').textContent = title;
-
-    const publishedAt = video.snippet.publishedAt;
-    const age = formatAge(publishedAt);
-    const statsEl = document.getElementById('video-stats');
-    statsEl.textContent = age
-      ? `${viewCount.toLocaleString()} views • ${age} • ${channelName}`
-      : `${viewCount.toLocaleString()} views • ${channelName}`;
-    statsEl.title = publishedAt ? new Date(publishedAt).toLocaleString() : '';
+    renderStats(video);
 
     const sourceEl = document.getElementById('video-source');
     if (sourceEl) {
@@ -1073,7 +1105,11 @@ function exportSaved() {
 async function copyShareLink() {
   if (!currentVideo) return;
 
-  const url = `${window.location.origin}/?v=${encodeURIComponent(currentVideo.id.videoId)}`;
+  const id = currentVideo.id.videoId;
+  const url =
+    currentVideo.provider === 'archive'
+      ? `https://archive.org/details/${encodeURIComponent(id)}`
+      : `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
 
   try {
     await navigator.clipboard.writeText(url);

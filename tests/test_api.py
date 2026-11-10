@@ -380,6 +380,16 @@ def test_video_by_id_unknown_returns_404(connection):
     assert client.get("/video/nope").status_code == 404
 
 
+def test_video_by_id_refresh_without_api_key_keeps_stored_count(connection):
+    _insert_video(connection, "r1", 0)
+
+    client = api.app.test_client()
+    response = client.get("/video/r1?refresh=1")
+
+    assert response.status_code == 200
+    assert response.get_json()["viewCount"] == 0
+
+
 def test_old_host_serves_migration_page(connection):
     client = api.app.test_client()
     response = client.get(

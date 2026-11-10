@@ -108,6 +108,22 @@ def duration_of(item: dict) -> int | None:
     return parse_duration((item.get("contentDetails") or {}).get("duration"))
 
 
+def fetch_views(conn, video_id: str) -> int | None:
+    """Frische View-Zahl eines einzelnen Videos (1 Unit)."""
+    payload = _get(conn, "videos", {"part": "statistics", "id": video_id})
+    db.spend(conn, config.VIDEOS_COST)
+
+    items = payload.get("items") or []
+    if not items:
+        return None
+
+    statistics = items[0].get("statistics") or {}
+    try:
+        return int(statistics.get("viewCount", 0))
+    except (TypeError, ValueError):
+        return None
+
+
 def view_count(item: dict) -> int:
     try:
         return int(item["statistics"].get("viewCount", 0))
