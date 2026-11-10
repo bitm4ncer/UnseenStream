@@ -33,9 +33,9 @@ Internet Archive  ──0 units────▶  archive     ◀─────�
 | `archive` | pulls fresh `mediatype:movies` items with `downloads: 0` from archive.org, stores the direct MP4 URL | no API key, polite rate limit |
 | `us-api` | weighted random selection, `/current-video`, `/health`, `/stats` | none |
 
-Both providers land in the same `videos` table; the API filters by the
-`source` field sent from the frontend (`all`, `youtube`, `archive`), which
-is also the toggle in the footer.
+All providers land in the same `videos` table; the API filters by the
+`source` field sent from the frontend (`all`, `youtube`, `archive`, or a
+comma-separated subset), which is also the toggle in the footer.
 
 **Every video is served once.** Selection and consumption happen under one
 lock, the row gets `served = 1`, and the pool query only returns
@@ -85,10 +85,37 @@ Discovery and serving use different view thresholds on purpose: a channel
 that produced a 40-view video is still worth tracking, but only zero-view
 videos are shown.
 
+## Domain
+
+`https://unseen.bitmancer.net` is the site. The old
+`unseenstream.bitmancer.net` host is still served by the same container but
+returns `web/migrate.html`, a page that copies `localStorage` (saved videos,
+seen list, settings) into the new origin via the URL hash and then redirects
+there. Existing bookmarks therefore keep working and land on the same feed
+with their library intact.
+
+## Downloads
+
+The download button works for both sources. archive.org files are fetched
+directly; YouTube has no public file URL, so the API pulls it with `yt-dlp`
+and streams it back through `GET /download/<id>`.
+
+YouTube challenges datacenter IPs with "confirm you're not a bot". Export
+cookies from a logged-in browser (Netscape format) and place them at
+`/opt/unseenstream/data/youtube-cookies.txt` (readable by uid 10001) to make
+downloads reliable; without cookies the API retries with the `tv_embedded`
+client and still fails for some videos.
+
 ## Endpoints
 
 - `GET|POST /current-video` — random candidate; POST accepts
   `{"excluded_ids": [...]}` to avoid repeats.
+- `GET /download/<id>` — streams a YouTube video through yt-dlp (or
+  redirects archive.org items to their MP4).
+- `GET /video/<id>` — one video by id, so shared links keep working even
+  after the feed has moved on.
+- `GET /sources` — providers this instance can serve.
+- `GET /unseen-count` — size of the in-memory candidate pool.
 - `GET /health` — pool size, channels, last discovery, quota used today.
 - `GET /stats` — tier distribution, quota, uptime.
 

@@ -1,7 +1,7 @@
 services:
   us-api:
     build: .
-    image: unseenstream:1.0.0
+    image: unseenstream:1.1.0
     container_name: us-api
     restart: unless-stopped
     command:
@@ -42,7 +42,7 @@ services:
 
   us-poller:
     build: .
-    image: unseenstream:1.0.0
+    image: unseenstream:1.1.0
     container_name: us-poller
     restart: unless-stopped
     command: ["python", "-m", "app.cli", "poller"]
@@ -71,7 +71,7 @@ services:
 
   us-discoverer:
     build: .
-    image: unseenstream:1.0.0
+    image: unseenstream:1.1.0
     container_name: us-discoverer
     restart: unless-stopped
     command: ["python", "-m", "app.cli", "discoverer"]

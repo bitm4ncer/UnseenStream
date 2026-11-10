@@ -2,17 +2,33 @@
 
 import logging
 import mimetypes
+import os
 import random
+import re
+import shutil
+import subprocess
+import tempfile
 import threading
 import time
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    redirect,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 
 from . import config, db
 
 logger = logging.getLogger(__name__)
+
+YTDLP = shutil.which("yt-dlp") or "yt-dlp"
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -42,7 +58,7 @@ _started_at = time.time()
 
 AGE_WEIGHT_CAP = 1825.0
 
-PROVIDERS = ("youtube", "archive", "dailymotion")
+PROVIDERS = ("youtube", "archive")
 
 
 def parse_sources(value: str | None) -> set[str] | None:
@@ -98,7 +114,7 @@ class CandidatePool:
                 "SELECT id, title, channel_id, channel_title, thumbnail, views, "
                 "published_at, provider, media_url "
                 "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0 "
-                "AND (provider NOT IN ('archive', 'dailymotion') "
+                "AND (provider != 'archive' "
                 "OR media_url IS NOT NULL)"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
@@ -239,13 +255,124 @@ def health():
     )
 
 
+def _download_name(title: str, video_id: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|]', "", title or "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()[:80]
+    cleaned = cleaned.encode("ascii", "ignore").decode().strip()
+    return f"{cleaned or video_id}.mp4"
+
+
+DOWNLOAD_DIR = Path(
+    os.environ.get(
+        "US_DOWNLOAD_DIR",
+        "/data/downloads" if Path("/data").is_dir() else tempfile.gettempdir(),
+    )
+)
+
+
+@app.get("/download/<video_id>")
+def download(video_id):
+    """YouTube laesst sich nur serverseitig holen, archive.org direkt."""
+    conn = db.connect()
+    row = conn.execute(
+        "SELECT id, provider, title, media_url FROM videos WHERE id = ?",
+        (video_id,),
+    ).fetchone()
+
+    if row is None:
+        abort(404)
+
+    if row["provider"] == "archive" and row["media_url"]:
+        return redirect(row["media_url"])
+
+    if row["provider"] != "youtube":
+        abort(404)
+
+    filename = _download_name(row["title"], video_id)
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    workdir = Path(tempfile.mkdtemp(dir=DOWNLOAD_DIR, prefix=f"{video_id}-"))
+
+    command = [
+        "--no-playlist",
+        "--no-warnings",
+        "--quiet",
+        "--socket-timeout",
+        "20",
+        "-f",
+        "bv*[height<=720]+ba/b[height<=720]/b",
+        "--merge-output-format",
+        "mp4",
+        "-o",
+        str(workdir / "video.%(ext)s"),
+        f"https://www.youtube.com/watch?v={video_id}",
+    ]
+
+    # YouTube blockt Rechenzentrums-IPs sporadisch ("confirm you're not a bot").
+    # tv_embedded umgeht das manchmal; mit Cookies aus dem eigenen Browser
+    # ist es zuverlaessig.
+    attempts = [
+        [],
+        ["--extractor-args", "youtube:player_client=tv_embedded"],
+    ]
+
+    if Path(config.YTDLP_COOKIES).is_file():
+        for attempt in attempts:
+            attempt.extend(["--cookies", config.YTDLP_COOKIES])
+
+    result = None
+    for extra in attempts:
+        try:
+            result = subprocess.run(
+                [YTDLP, *extra, *command], capture_output=True, timeout=240
+            )
+        except FileNotFoundError:
+            shutil.rmtree(workdir, ignore_errors=True)
+            return jsonify({"error": "yt_dlp_missing"}), 503
+        except subprocess.TimeoutExpired:
+            continue
+
+        if result.returncode == 0 and list(workdir.glob("video.*")):
+            break
+
+    produced = sorted(workdir.glob("video.*"))
+    if result is None:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return jsonify({"error": "download_timeout"}), 504
+
+    if result.returncode != 0 or not produced:
+        detail = result.stderr.decode("utf-8", "replace")[-300:]
+        shutil.rmtree(workdir, ignore_errors=True)
+        logger.warning("yt-dlp fehlgeschlagen: %s", detail)
+        return jsonify({"error": "download_failed", "detail": detail}), 502
+
+    path = produced[0]
+    size = path.stat().st_size
+
+    def generate():
+        try:
+            with path.open("rb") as handle:
+                while True:
+                    chunk = handle.read(65536)
+                    if not chunk:
+                        break
+                    yield chunk
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    return Response(
+        stream_with_context(generate()),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "video/mp4",
+            "Content-Length": str(size),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @app.get("/sources")
 def sources():
-    """Welche Quellen sind konfiguriert und damit im Footer sinnvoll?"""
-    providers = ["youtube", "archive"]
-    if config.DAILYMOTION_ENABLED and config.DAILYMOTION_PLAYER:
-        providers.append("dailymotion")
-    return jsonify({"providers": providers})
+    return jsonify({"providers": list(PROVIDERS)})
 
 
 @app.get("/unseen-count")
@@ -338,6 +465,42 @@ def stats():
     )
 
 
+NEW_HOST = "unseen.bitmancer.net"
+OLD_HOSTS = {"unseenstream.bitmancer.net"}
+
+
 @app.get("/")
 def index():
+    """Alte Domain liefert die Umzugsseite, die localStorage mitnimmt."""
+    host = (request.host or "").split(":")[0].lower()
+    if host in OLD_HOSTS:
+        return send_from_directory(WEB_DIR, "migrate.html")
     return send_from_directory(WEB_DIR, "index.html")
+
+
+@app.get("/video/<video_id>")
+def video_by_id(video_id):
+    """Ein einzelnes Video fuer geteilte Links, auch wenn es schon lief."""
+    conn = db.connect()
+    row = conn.execute(
+        "SELECT id, title, channel_id, channel_title, thumbnail, views, "
+        "published_at, provider, media_url FROM videos WHERE id = ?",
+        (video_id,),
+    ).fetchone()
+
+    if row is None:
+        return jsonify({"error": "not_found"}), 404
+
+    return jsonify(
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "channelId": row["channel_id"] or row["channel_title"],
+            "channelTitle": row["channel_title"],
+            "thumbnail": row["thumbnail"],
+            "viewCount": row["views"],
+            "publishedAt": row["published_at"],
+            "provider": row["provider"],
+            "mediaUrl": row["media_url"],
+        }
+    )

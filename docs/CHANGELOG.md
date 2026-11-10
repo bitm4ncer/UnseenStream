@@ -5,6 +5,25 @@ All notable changes to UnseenStream will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-10
+
+### Added
+- The site moved to `unseen.bitmancer.net`. The old host serves a migration
+  page that carries saved videos and settings into the new origin, so
+  bookmarks keep working without a manual export.
+- Share links (`/?v=<id>`) resolve through `GET /video/<id>`, a copy-link
+  button in the action rail, and a bookmark export in the library.
+- Saved videos that were already watched show `seen` instead of the count
+  from the source, which stays at zero.
+- `GET /download/<id>`: YouTube videos are fetched with yt-dlp and streamed
+  through the API, so the download button works for both providers.
+  archive.org items redirect to their public MP4.
+
+### Removed
+- Dailymotion source. Embeds require a custom Player, which Dailymotion only
+  sells with the Edge plan, and the API refuses direct stream URLs without
+  partner rights.
+
 ## [1.0.0] - 2026-11-10
 
 ### Changed

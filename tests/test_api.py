@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 from app import api, db
 
@@ -273,6 +274,121 @@ def test_unseen_count_can_filter_by_source(connection):
     assert client.get("/unseen-count").get_json()["count"] == 2
     assert client.get("/unseen-count?source=archive").get_json()["count"] == 1
     assert client.get("/unseen-count?source=youtube").get_json()["count"] == 1
+
+
+def test_source_filter_accepts_csv(connection):
+    _reset_pool()
+    _insert_video(connection, "yt", 0, provider="youtube")
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+    payload = client.post(
+        "/current-video", json={"source": "youtube,archive"}
+    ).get_json()
+
+    assert payload["provider"] in ("youtube", "archive")
+
+
+def test_unseen_count_accepts_csv(connection):
+    _reset_pool()
+    _insert_video(connection, "yt", 0, provider="youtube")
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+
+    assert (
+        client.get("/unseen-count?source=youtube,archive").get_json()["count"]
+        == 2
+    )
+
+
+def test_download_unknown_video_returns_404(connection):
+    client = api.app.test_client()
+
+    assert client.get("/download/does-not-exist").status_code == 404
+
+
+def test_download_archive_redirects_to_file(connection):
+    _insert_video(connection, "ar", 0, provider="archive")
+
+    client = api.app.test_client()
+    response = client.get("/download/ar")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].startswith(
+        "https://archive.org/download/"
+    )
+
+
+def test_download_youtube_streams_ytdlp(connection, monkeypatch, tmp_path):
+    _insert_video(connection, "yt1", 0, provider="youtube")
+    monkeypatch.setattr(api, "DOWNLOAD_DIR", tmp_path)
+
+    class FakeResult:
+        returncode = 0
+        stderr = b""
+        stdout = b""
+
+    def fake_run(command, capture_output=True, timeout=0):
+        target = command[command.index("-o") + 1].replace("%(ext)s", "mp4")
+        Path(target).write_bytes(b"video-bytes")
+        return FakeResult()
+
+    monkeypatch.setattr(api.subprocess, "run", fake_run)
+
+    client = api.app.test_client()
+    response = client.get("/download/yt1")
+
+    assert response.status_code == 200
+    assert response.data == b"video-bytes"
+    assert "attachment" in response.headers["Content-Disposition"]
+
+
+def test_download_youtube_failure_returns_502(connection, monkeypatch, tmp_path):
+    _insert_video(connection, "yt2", 0, provider="youtube")
+    monkeypatch.setattr(api, "DOWNLOAD_DIR", tmp_path)
+
+    class FakeResult:
+        returncode = 1
+        stderr = b"Sign in to confirm you are not a bot"
+        stdout = b""
+
+    monkeypatch.setattr(
+        api.subprocess, "run", lambda *a, **k: FakeResult()
+    )
+
+    client = api.app.test_client()
+    response = client.get("/download/yt2")
+
+    assert response.status_code == 502
+    assert response.get_json()["error"] == "download_failed"
+
+
+def test_video_by_id_returns_shared_video(connection):
+    _insert_video(connection, "shared", 0, provider="archive")
+
+    client = api.app.test_client()
+    payload = client.get("/video/shared").get_json()
+
+    assert payload["id"] == "shared"
+    assert payload["provider"] == "archive"
+
+
+def test_video_by_id_unknown_returns_404(connection):
+    client = api.app.test_client()
+
+    assert client.get("/video/nope").status_code == 404
+
+
+def test_old_host_serves_migration_page(connection):
+    client = api.app.test_client()
+    response = client.get(
+        "/", headers={"Host": "unseenstream.bitmancer.net"}
+    )
+
+    assert response.status_code == 200
+    assert b"has moved" in response.data
+    assert b"unseen.bitmancer.net" in response.data
 
 
 def test_response_includes_provider(connection):

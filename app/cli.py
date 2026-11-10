@@ -53,11 +53,6 @@ def main(argv: list[str] | None = None) -> int:
         "verify", help="Nicht abrufbare Items entfernter Quellen loeschen"
     )
     verify_parser.add_argument("--limit", type=int, default=1000)
-    verify_parser.add_argument(
-        "--provider",
-        choices=("archive", "dailymotion", "all"),
-        default="archive",
-    )
 
     sub.add_parser("initdb", help="Datenbank anlegen")
 
@@ -103,13 +98,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.role == "verify":
-        from . import archive, dailymotion
+        from . import archive
 
-        conn = db.connect()
-        if args.provider in ("archive", "all"):
-            archive.verify_archive(conn, limit=args.limit)
-        if args.provider in ("dailymotion", "all"):
-            dailymotion.verify(conn, limit=args.limit)
+        archive.verify_archive(db.connect(), limit=args.limit)
         return 0
 
     if args.role == "initdb":

@@ -23,7 +23,6 @@
     <div id="loading">Suchen…</div>
     <div id="player" style="visibility: hidden;"></div>
     <video id="native-player" playsinline preload="metadata"></video>
-    <iframe id="embed-player" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title="Video"></iframe>
     <div id="swipe-layer" aria-hidden="true"></div>
 
     <div id="overlay">
@@ -34,6 +33,12 @@
             <path d="M12 3v12"></path>
             <path d="M7 10l5 5 5-5"></path>
             <path d="M4 19h16"></path>
+          </svg>
+        </button>
+        <button id="share-btn" onclick="copyShareLink()" title="Copy link" aria-label="Copy link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.43"></path>
+            <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.33-1.33"></path>
           </svg>
         </button>
         <button id="library-btn" onclick="openSaved()" title="Saved videos" aria-label="Saved videos">
@@ -71,9 +76,6 @@
             </button>
             <button type="button" class="source-btn active" data-source="archive" data-tooltip="archive.org" aria-label="archive.org" aria-pressed="true">
               <img src="/icons/archive.svg" alt="" width="16" height="16">
-            </button>
-            <button type="button" class="source-btn active" data-source="dailymotion" data-tooltip="Dailymotion" aria-label="Dailymotion" aria-pressed="true">
-              <img src="/icons/dailymotion.svg" alt="" width="16" height="16">
             </button>
           </div>
 
@@ -128,12 +130,39 @@
     <div class="modal-content">
       <div class="modal-head">
         <h2>Saved <span id="saved-count">0</span></h2>
-        <button class="close-btn" onclick="closeSaved()" aria-label="Close">×</button>
+        <div class="modal-actions">
+          <button class="ghost-btn" onclick="exportSaved()" title="Export bookmarks">Export</button>
+          <button class="close-btn" onclick="closeSaved()" aria-label="Close">×</button>
+        </div>
       </div>
       <div id="saved-list" class="video-list"></div>
     </div>
   </div>
 
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Beim Domainumzug: Daten aus dem Hash uebernehmen, bevor script.js
+    // localStorage liest.
+    (function () {
+      if (!window.location.hash.startsWith('#import=')) return;
+
+      try {
+        var raw = decodeURIComponent(escape(atob(window.location.hash.slice(8))));
+        var data = JSON.parse(raw);
+
+        Object.keys(data).forEach(function (key) {
+          if (localStorage.getItem(key) === null) {
+            localStorage.setItem(key, data[key]);
+          }
+        });
+      } catch (error) {
+        /* kaputter Payload: einfach ohne Import weiter */
+      }
+
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    })();
+  </script>
   <script src="https://www.youtube.com/iframe_api"></script>
   <script src="script.js?v=3"></script>
 </body>

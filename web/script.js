@@ -21,12 +21,10 @@ let touchEndY = 0;
 let isLoading = false;
 let isAutoplayEnabled = false;
 let currentProvider = 'youtube';
-let dmPlaying = true;
 
 const PROVIDER_LABELS = {
   youtube: 'YouTube',
   archive: 'Archive',
-  dailymotion: 'Dailymotion',
 };
 
 const isTouchDevice =
@@ -79,26 +77,42 @@ async function fetchNextVideo() {
     }
 
     const video = await response.json();
-
-    return {
-      id: { videoId: video.id },
-      provider: video.provider || 'youtube',
-      mediaUrl: video.mediaUrl || null,
-      channelId: video.channelId || null,
-      snippet: {
-        title: video.title,
-        channelTitle: video.channelTitle,
-        publishedAt: video.publishedAt,
-        thumbnails: {
-          medium: { url: video.thumbnail },
-        },
-      },
-      statistics: {
-        viewCount: String(video.viewCount ?? 0),
-      },
-    };
+    return mapApiVideo(video);
   } catch (error) {
     console.warn('Video-Abruf fehlgeschlagen:', error.message);
+    return null;
+  }
+}
+
+function mapApiVideo(video) {
+  return {
+    id: { videoId: video.id },
+    provider: video.provider || 'youtube',
+    mediaUrl: video.mediaUrl || null,
+    channelId: video.channelId || null,
+    snippet: {
+      title: video.title,
+      channelTitle: video.channelTitle,
+      publishedAt: video.publishedAt,
+      thumbnails: {
+        medium: { url: video.thumbnail },
+      },
+    },
+    statistics: {
+      viewCount: String(video.viewCount ?? 0),
+    },
+  };
+}
+
+async function fetchSharedVideo(videoId) {
+  try {
+    const response = await fetch(`/video/${encodeURIComponent(videoId)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    return mapApiVideo(await response.json());
+  } catch (error) {
     return null;
   }
 }
@@ -354,12 +368,6 @@ function preloadUpcoming() {
       continue;
     }
 
-    if (video.provider === 'dailymotion') {
-      // iframe-Embeds lassen sich nicht vorladen.
-      clearPreloadSlot(slot);
-      continue;
-    }
-
     const id = video.id.videoId;
     if (slot.currentId === id) continue;
 
@@ -457,61 +465,14 @@ function rememberChannel(video) {
   localStorage.setItem('recent_channels', JSON.stringify(recentChannels));
 }
 
-function dmEmbedSrc(mediaUrl) {
-  if (!mediaUrl) return '';
-  const sep = mediaUrl.includes('?') ? '&' : '?';
-  return `${mediaUrl}${sep}autoplay=1&mute=0&queue-enable=false&controls=1`;
-}
-
-function dmCommand(command) {
-  const frame = document.getElementById('embed-player');
-  if (!frame || !frame.contentWindow) return;
-  try {
-    frame.contentWindow.postMessage(
-      JSON.stringify({ command, parameters: [] }),
-      '*'
-    );
-  } catch (error) {
-    console.warn('Dailymotion-Befehl fehlgeschlagen:', error);
-  }
-}
-
-// Dailymotion schickt play/pause/end als postMessage. Daraus leiten wir
-// Button-Zustand und Autoplay ab.
-window.addEventListener('message', (event) => {
-  if (!/^https:\/\/([a-z0-9-]+\.)*dailymotion\.com$/.test(event.origin)) return;
-
-  let data = event.data;
-  if (typeof data === 'string') {
-    try {
-      data = JSON.parse(data);
-    } catch (error) {
-      return;
-    }
-  }
-  if (!data || typeof data !== 'object') return;
-
-  if (data.event === 'play' || data.event === 'pause') {
-    dmPlaying = data.event === 'play';
-    const btn = document.getElementById('play-pause-btn');
-    if (btn) btn.classList.toggle('playing', dmPlaying);
-  }
-
-  if (data.event === 'end' && isAutoplayEnabled) {
-    nextVideo();
-  }
-});
-
 function loadVideo(video, direction = 'next') {
   if (!video) return;
 
   currentVideo = video;
   const videoId = video.id.videoId;
   const isArchive = video.provider === 'archive';
-  const isEmbed = video.provider === 'dailymotion';
   const playerElement = document.getElementById('player');
   const nativePlayer = document.getElementById('native-player');
-  const embedPlayer = document.getElementById('embed-player');
   currentProvider = video.provider || 'youtube';
   resetTimeline();
 
@@ -531,7 +492,6 @@ function loadVideo(video, direction = 'next') {
 
   // Add slide-out animation
   playerElement.className = slideOutClass;
-  if (embedPlayer) embedPlayer.className = slideOutClass;
 
   // Wait for slide-out animation to complete, then load new video
   setTimeout(() => {
@@ -549,42 +509,13 @@ function loadVideo(video, direction = 'next') {
           console.warn('stopVideo fehlgeschlagen:', error);
         }
       }
-      document.body.classList.remove('embed-mode');
-      if (embedPlayer) embedPlayer.src = 'about:blank';
       document.body.classList.add('archive-mode');
       if (nativePlayer) {
         nativePlayer.src = video.mediaUrl;
         nativePlayer.play().catch(() => {});
       }
-    } else if (isEmbed) {
-      if (!video.mediaUrl) {
-        console.warn('Dailymotion-Video ohne Embed-URL:', videoId);
-        nextVideo();
-        return;
-      }
-      // Der Embed bringt seinen eigenen Ton mit: alles andere hart stoppen.
-      if (player && player.stopVideo) {
-        try {
-          player.stopVideo();
-        } catch (error) {
-          console.warn('stopVideo fehlgeschlagen:', error);
-        }
-      }
-      if (nativePlayer) {
-        nativePlayer.pause();
-        nativePlayer.removeAttribute('src');
-        nativePlayer.load();
-      }
-      document.body.classList.remove('archive-mode');
-      document.body.classList.add('embed-mode');
-      if (embedPlayer) embedPlayer.src = dmEmbedSrc(video.mediaUrl);
-      // Erst der play-Event des Players gilt als "laeuft"; so sendet der
-      // erste Tap nicht versehentlich pause, wenn Autoplay blockiert wurde.
-      dmPlaying = false;
     } else {
       document.body.classList.remove('archive-mode');
-      document.body.classList.remove('embed-mode');
-      if (embedPlayer) embedPlayer.src = 'about:blank';
       if (nativePlayer) {
         nativePlayer.pause();
         nativePlayer.removeAttribute('src');
@@ -640,12 +571,10 @@ function loadVideo(video, direction = 'next') {
 
     // Add slide-in animation
     playerElement.className = slideInClass;
-    if (embedPlayer) embedPlayer.className = slideInClass;
 
     // Remove animation classes after animation completes
     setTimeout(() => {
       playerElement.className = '';
-      if (embedPlayer) embedPlayer.className = '';
     }, 400);
   }, 400);
 }
@@ -853,21 +782,19 @@ function updateHeartButton() {
   heartBtn.classList.toggle('saved', isSaved);
 }
 
-// Download nur fuer archive.org: dort sind die Dateien oeffentlich und
-// direkt abrufbar. YouTube bietet keine Datei-URL (und erlaubt es nicht).
+// Download: archive.org liefert die Datei direkt (CORS), YouTube nur ueber
+// den Server (/download/<id>), weil es keine oeffentliche Datei-URL gibt.
 function updateDownloadButton() {
   const button = document.getElementById('download-btn');
   if (!button) return;
 
   const canDownload =
     !!currentVideo &&
-    currentVideo.provider === 'archive' &&
-    !!currentVideo.mediaUrl;
+    (currentVideo.provider === 'youtube' ||
+      (currentVideo.provider === 'archive' && !!currentVideo.mediaUrl));
 
   button.disabled = !canDownload;
-  button.title = canDownload
-    ? 'Download video'
-    : 'Only archive.org videos can be downloaded';
+  button.title = canDownload ? 'Download video' : 'Download not available';
 }
 
 function downloadFileName(title) {
@@ -880,13 +807,51 @@ function downloadFileName(title) {
 }
 
 async function downloadCurrent() {
-  if (!currentVideo || currentVideo.provider !== 'archive' || !currentVideo.mediaUrl) {
+  if (!currentVideo) return;
+
+  const button = document.getElementById('download-btn');
+  const filename = downloadFileName(currentVideo.snippet.title);
+
+  // YouTube: der Server holt die Datei mit yt-dlp. Als Blob, damit ein
+  // Fehler (Bot-Check) als Toast ankommt statt als JSON-Seite im Browser.
+  if (currentVideo.provider === 'youtube') {
+    if (button) {
+      button.disabled = true;
+      button.title = 'Preparing download…';
+    }
+
+    try {
+      const response = await fetch(
+        `/download/${encodeURIComponent(currentVideo.id.videoId)}`
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      track('download', { provider: 'youtube', ok: true });
+    } catch (error) {
+      console.warn('YouTube-Download fehlgeschlagen:', error);
+      showToast('Download failed – YouTube blocked this one');
+      track('download', { provider: 'youtube', ok: false });
+    } finally {
+      updateDownloadButton();
+    }
+
     return;
   }
 
-  const button = document.getElementById('download-btn');
+  if (currentVideo.provider !== 'archive' || !currentVideo.mediaUrl) {
+    return;
+  }
+
   const url = currentVideo.mediaUrl;
-  const filename = downloadFileName(currentVideo.snippet.title);
 
   if (button) {
     button.disabled = true;
@@ -988,19 +953,6 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function togglePlayPause(trigger = 'button') {
-  if (currentProvider === 'dailymotion') {
-    dmPlaying = !dmPlaying;
-    dmCommand(dmPlaying ? 'play' : 'pause');
-    const dmBtn = document.getElementById('play-pause-btn');
-    if (dmBtn) dmBtn.classList.toggle('playing', dmPlaying);
-    track('play-pause', {
-      trigger,
-      provider: 'dailymotion',
-      playing: dmPlaying,
-    });
-    return;
-  }
-
   if (currentProvider === 'archive') {
     const native = document.getElementById('native-player');
     if (!native || !native.src) return;
@@ -1071,7 +1023,7 @@ function openSaved() {
         <div class="video-item-info">
           <div class="video-item-title">${video.title}</div>
           <div class="video-item-stats">
-            ${video.viewCount.toLocaleString()} views • ${video.channelName}
+            ${viewedVideos.has(video.id) ? 'seen' : `${video.viewCount.toLocaleString()} views`} • ${video.channelName}
           </div>
         </div>
       </div>
@@ -1080,6 +1032,63 @@ function openSaved() {
 
   document.getElementById('saved-modal').classList.add('show');
   track('library-open', { saved: savedVideos.length });
+}
+
+function exportSaved() {
+  const saved = getSavedVideos();
+  const blob = new Blob([JSON.stringify(saved, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'unseen-bookmarks.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  track('library-export', { saved: saved.length });
+}
+
+async function copyShareLink() {
+  if (!currentVideo) return;
+
+  const url = `${window.location.origin}/?v=${encodeURIComponent(currentVideo.id.videoId)}`;
+
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('Link copied');
+  } catch (error) {
+    // Fallback: unsichtbares Feld + execCommand.
+    const field = document.createElement('textarea');
+    field.value = url;
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    try {
+      document.execCommand('copy');
+      showToast('Link copied');
+    } catch (copyError) {
+      showToast('Could not copy link');
+    }
+    field.remove();
+  }
+
+  track('share', { provider: currentProvider });
+}
+
+let toastTimer = null;
+
+function showToast(message) {
+  let toast = document.getElementById('toast');
+  if (!toast) return;
+
+  toast.textContent = message;
+  toast.classList.add('show');
+
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 function closeSaved() {
@@ -1100,7 +1109,7 @@ function playVideo(videoId) {
   }
 
   const saved = getSavedVideos().find(v => v.id === videoId);
-  if (saved && (saved.provider === 'archive' || saved.provider === 'dailymotion')) {
+  if (saved && saved.provider === 'archive') {
     loadVideo({
       id: { videoId: saved.id },
       provider: saved.provider,
@@ -1142,9 +1151,7 @@ function closeWelcome() {
   track('welcome-start');
 
   // Start playing the first video if it's loaded
-  if (currentProvider === 'dailymotion') {
-    dmCommand('play');
-  } else if (player && player.playVideo && currentVideo) {
+  if (player && player.playVideo && currentVideo) {
     player.playVideo();
   }
 }
@@ -1164,10 +1171,10 @@ function checkFirstVisit() {
 }
 
 // ============================================
-// Source Filter (YouTube / archive.org / Dailymotion)
+// Source Filter (YouTube / archive.org)
 // ============================================
 
-const SOURCES = ['youtube', 'archive', 'dailymotion'];
+const SOURCES = ['youtube', 'archive'];
 
 function loadEnabledSources() {
   const stored = localStorage.getItem('enabled_sources');
@@ -1204,8 +1211,8 @@ function updateSourceButtons() {
   });
 }
 
-// Quellen, die der Server gar nicht bedient (z. B. Dailymotion ohne Player-ID),
-// werden ausgeblendet statt einen leeren Feed anzubieten.
+// Quellen, die der Server gar nicht bedient, werden ausgeblendet statt einen
+// leeren Feed anzubieten.
 async function syncAvailableSources() {
   try {
     const response = await fetch('/sources', { cache: 'no-store' });
@@ -1241,16 +1248,12 @@ function resetFeed() {
   preloadSlots.forEach(clearPreloadSlot);
 
   document.body.classList.remove('archive-mode');
-  document.body.classList.remove('embed-mode');
   const nativePlayer = document.getElementById('native-player');
   if (nativePlayer) {
     nativePlayer.pause();
     nativePlayer.removeAttribute('src');
     nativePlayer.load();
   }
-  const embedPlayer = document.getElementById('embed-player');
-  if (embedPlayer) embedPlayer.src = 'about:blank';
-  dmPlaying = false;
 
   fetchVideos();
   refreshUnseenCount();
@@ -1505,5 +1508,17 @@ window.addEventListener('load', async () => {
   checkFirstVisit();
 
   refreshUnseenCount();
+
+  const sharedId = new URLSearchParams(window.location.search).get('v');
+  if (sharedId) {
+    const shared = await fetchSharedVideo(sharedId);
+    if (shared) {
+      currentVideo = null;
+      videoQueue = [shared];
+      currentIndex = 0;
+      loadVideo(shared);
+    }
+  }
+
   await fetchVideos();
 });

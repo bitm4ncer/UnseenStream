@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unseen Stream has moved</title>
+  <meta name="robots" content="noindex">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #08080a;
+      color: #f5f5f7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 24px;
+    }
+    main { text-align: center; max-width: 360px; }
+    img { width: 64px; height: 64px; margin-bottom: 20px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+    p { font-size: 14px; line-height: 1.5; color: rgba(245, 245, 247, 0.6); }
+    a { color: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/favicon.svg" alt="">
+    <h1>Unseen Stream has moved</h1>
+    <p>Taking your saved videos and settings to <a href="https://unseen.bitmancer.net/">unseen.bitmancer.net</a>…</p>
+    <noscript>
+      <p style="margin-top: 16px;"><a href="https://unseen.bitmancer.net/">Continue</a></p>
+    </noscript>
+  </main>
+
+  <script>
+    (function () {
+      var keys = [
+        'savedVideos',
+        'viewed_videos',
+        'recent_channels',
+        'autoplayEnabled',
+        'enabled_sources',
+        'sort_mode',
+        'source_filter',
+        'hasVisited'
+      ];
+      var data = {};
+
+      keys.forEach(function (key) {
+        try {
+          var value = localStorage.getItem(key);
+          if (value !== null) data[key] = value;
+        } catch (error) {
+          /* Speicher gesperrt: dann eben ohne Daten umziehen. */
+        }
+      });
+
+      var target = new URL('https://unseen.bitmancer.net/');
+      target.search = window.location.search;
+
+      try {
+        var payload = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+        if (Object.keys(data).length) target.hash = 'import=' + payload;
+      } catch (error) {
+        /* ignorieren */
+      }
+
+      window.location.replace(target.toString());
+    })();
+  </script>
+</body>
+</html>

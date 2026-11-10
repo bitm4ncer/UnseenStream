@@ -232,7 +232,7 @@ def refresh_thumbnails(conn, limit: int = 8) -> int:
         "SELECT id, media_url FROM videos "
         "WHERE provider = 'archive' AND thumb_checked = 0 "
         "AND media_url IS NOT NULL "
-        "ORDER BY published_at DESC LIMIT ?",
+        "ORDER BY (served = 0 AND views = 0) DESC, published_at DESC LIMIT ?",
         (limit,),
     ).fetchall()
 
