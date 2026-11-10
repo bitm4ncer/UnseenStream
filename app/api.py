@@ -4,7 +4,6 @@ import logging
 import random
 import threading
 import time
-from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,9 +19,6 @@ app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 app.logger.setLevel(logging.INFO)
 
 _started_at = time.time()
-_flush_thread_started = False
-_served_lock = threading.Lock()
-_served: Counter = Counter()
 
 
 class CandidatePool:
@@ -30,6 +26,7 @@ class CandidatePool:
 
     def __init__(self, ttl: float = 20.0):
         self._lock = threading.Lock()
+        self._pick_lock = threading.Lock()
         self._items: list[dict] = []
         self._weights: list[int] = []
         self._loaded_at = 0.0
@@ -48,7 +45,7 @@ class CandidatePool:
             query = (
                 "SELECT id, title, channel_title, thumbnail, views, "
                 "published_at, provider "
-                "FROM videos WHERE views <= ? AND duration_s > ?"
+                "FROM videos WHERE views <= ? AND duration_s > ? AND served = 0"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
 
@@ -80,71 +77,55 @@ class CandidatePool:
         self, excluded: set[str] | None = None, source: str | None = None
     ) -> dict | None:
         self.refresh()
-        items = self._items
-        if not items:
-            return None
 
-        pairs = list(zip(items, self._weights))
-        wanted = source if source in ("youtube", "archive") else None
+        # Auswahl und Verbrauch muessen atomar sein, sonst bekommen zwei
+        # gleichzeitige Requests dasselbe Video.
+        with self._pick_lock:
+            items = self._items
+            if not items:
+                return None
 
-        if wanted:
-            pairs = [(item, weight) for item, weight in pairs if item["provider"] == wanted]
-        if excluded:
-            remaining = [
-                (item, weight) for item, weight in pairs if item["id"] not in excluded
-            ]
-            if remaining:
-                pairs = remaining
+            pairs = list(zip(items, self._weights))
+            wanted = source if source in ("youtube", "archive") else None
 
-        if not pairs:
-            return None
+            if wanted:
+                pairs = [
+                    (item, weight)
+                    for item, weight in pairs
+                    if item["provider"] == wanted
+                ]
+            if excluded:
+                remaining = [
+                    (item, weight)
+                    for item, weight in pairs
+                    if item["id"] not in excluded
+                ]
+                if remaining:
+                    pairs = remaining
 
-        chosen = random.choices(
-            [item for item, _ in pairs],
-            weights=[weight for _, weight in pairs],
-            k=1,
-        )[0]
-        return chosen
+            if not pairs:
+                return None
+
+            chosen = random.choices(
+                [item for item, _ in pairs],
+                weights=[weight for _, weight in pairs],
+                k=1,
+            )[0]
+
+            # Global verbrauchen: das Video darf kein zweiter Nutzer bekommen.
+            self._consume(chosen["id"])
+            return chosen
+
+    def _consume(self, video_id: str) -> None:
+        with self._lock:
+            for index, item in enumerate(self._items):
+                if item["id"] == video_id:
+                    del self._items[index]
+                    del self._weights[index]
+                    break
 
 
 pool = CandidatePool()
-
-
-def _record_served(video_id: str) -> None:
-    with _served_lock:
-        _served[video_id] += 1
-
-
-def _flush_served_forever() -> None:
-    while True:
-        time.sleep(30)
-        with _served_lock:
-            if not _served:
-                continue
-            batch = list(_served.items())
-            _served.clear()
-        try:
-            conn = db.connect()
-            conn.executemany(
-                "UPDATE videos SET served = served + ? WHERE id = ?",
-                [(count, video_id) for video_id, count in batch],
-            )
-            conn.commit()
-        except Exception:  # pragma: no cover - nur Logging
-            logger.exception("Konnte served-Zaehler nicht schreiben")
-
-
-def _start_background() -> None:
-    global _flush_thread_started
-    if _flush_thread_started:
-        return
-    _flush_thread_started = True
-    threading.Thread(target=_flush_served_forever, daemon=True).start()
-
-
-@app.before_request
-def _ensure_background() -> None:
-    _start_background()
 
 
 @app.get("/health")
@@ -179,8 +160,7 @@ def current_video():
     video = pool.pick(excluded, source)
     if video is None:
         return (
-            jsonify(
-                {
+            jsonify(                {
                     "error": "no_videos",
                     "message": "Keine Kandidaten im Pool. Der Poller fuellt ihn laufend.",
                     "retry_after": 15,
@@ -189,7 +169,13 @@ def current_video():
             503,
         )
 
-    _record_served(video["id"])
+    # Sofort global verbrauchen, damit kein zweiter Nutzer das Video bekommt.
+    conn = db.connect()
+    conn.execute(
+        "UPDATE videos SET served = served + 1 WHERE id = ?", (video["id"],)
+    )
+    conn.commit()
+
     return jsonify(
         {
             "id": video["id"],

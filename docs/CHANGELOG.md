@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internet Archive as a second source: fresh `mediatype:movies` items with
   `downloads: 0`, served through archive.org's embed player and selectable
   via the footer toggle.
+- Globally consumed pool: a video is marked `served` atomically on delivery
+  and never shown to a second visitor.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

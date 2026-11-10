@@ -37,6 +37,11 @@ Both providers land in the same `videos` table; the API filters by the
 `source` field sent from the frontend (`all`, `youtube`, `archive`), which
 is also the toggle in the footer.
 
+**Every video is served once.** Selection and consumption happen under one
+lock, the row gets `served = 1`, and the pool query only returns
+`served = 0`. A video that someone has seen anywhere on the site never
+appears for anyone else.
+
 Because RSS polling is free, a quota outage only pauses discovery — the feed
 keeps working. Channels are tiered by hit rate (`hot` 10 min, `warm` 1 h,
 `cold` 6 h) and dropped after five consecutive feed failures, so dead

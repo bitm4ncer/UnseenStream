@@ -49,9 +49,9 @@ def test_only_zero_view_videos_are_served(connection):
     _insert_video(connection, "hundred", 100)
 
     client = api.app.test_client()
-    seen = {client.get("/current-video").get_json()["id"] for _ in range(40)}
+    payload = client.get("/current-video").get_json()
 
-    assert seen == {"zero"}
+    assert payload["id"] == "zero"
 
 
 def test_too_young_videos_are_not_served(connection):
@@ -60,9 +60,9 @@ def test_too_young_videos_are_not_served(connection):
     _insert_video(connection, "old_enough", 0, age_hours=3)
 
     client = api.app.test_client()
-    seen = {client.get("/current-video").get_json()["id"] for _ in range(30)}
+    payload = client.get("/current-video").get_json()
 
-    assert seen == {"old_enough"}
+    assert payload["id"] == "old_enough"
 
 
 def test_shorts_are_excluded(connection):
@@ -73,9 +73,9 @@ def test_shorts_are_excluded(connection):
     _insert_video(connection, "unknown", 0, duration=None)
 
     client = api.app.test_client()
-    seen = {client.get("/current-video").get_json()["id"] for _ in range(40)}
+    payload = client.get("/current-video").get_json()
 
-    assert seen == {"long"}
+    assert payload["id"] == "long"
 
 
 def test_stale_videos_are_not_served(connection):
@@ -84,9 +84,9 @@ def test_stale_videos_are_not_served(connection):
     _insert_video(connection, "stale", 0, age_hours=500)
 
     client = api.app.test_client()
-    ids = {client.get("/current-video").get_json()["id"] for _ in range(30)}
+    payload = client.get("/current-video").get_json()
 
-    assert ids == {"fresh"}
+    assert payload["id"] == "fresh"
 
 
 def test_excluded_ids_are_respected(connection):
@@ -120,12 +120,38 @@ def test_source_filter_limits_provider(connection):
     _insert_video(connection, "ar", 0, provider="archive")
 
     client = api.app.test_client()
-    ids = {
-        client.post("/current-video", json={"source": "archive"}).get_json()["id"]
-        for _ in range(20)
-    }
+    payload = client.post("/current-video", json={"source": "archive"}).get_json()
 
-    assert ids == {"ar"}
+    assert payload["id"] == "ar"
+    assert payload["provider"] == "archive"
+
+
+def test_video_is_consumed_after_first_serve(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0)
+    _insert_video(connection, "b", 0)
+
+    client = api.app.test_client()
+    first = client.get("/current-video").get_json()["id"]
+    second = client.get("/current-video").get_json()["id"]
+
+    assert first != second
+    assert client.get("/current-video").status_code == 503
+
+    assert connection.execute(
+        "SELECT COUNT(*) FROM videos WHERE served = 1"
+    ).fetchone()[0] == 2
+
+
+def test_consumed_videos_stay_gone_after_refresh(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0)
+
+    client = api.app.test_client()
+    client.get("/current-video")
+
+    _reset_pool()  # Cache verwerfen, aus der DB neu laden
+    assert api.pool.pick() is None
 
 
 def test_source_filter_empty_provider_returns_503(connection):
