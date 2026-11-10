@@ -1,123 +1,148 @@
-# UnseenStream
+<p align="center">
+  <img src="web/favicon.svg" alt="UnseenStream" width="96">
+</p>
 
-A TikTok-style feed of YouTube videos almost nobody has seen: 0 to 100 views,
-raw and unpolished. Live at **https://unseenstream.bitmancer.net**.
+<p align="center">
+  <strong>Watch videos nobody has seen.</strong><br>
+  A swipe feed of YouTube and archive.org uploads with zero views, served once and then gone for everyone.
+</p>
+
+<p align="center">
+  <a href="https://unseen.bitmancer.net"><img alt="Live: unseen.bitmancer.net" src="https://img.shields.io/badge/live-unseen.bitmancer.net-1f6feb?logo=googlechrome&logoColor=white"></a>
+  <a href="https://github.com/bitm4ncer/UnseenStream/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/bitm4ncer/UnseenStream?style=social"></a>
+</p>
+
+<p align="center">
+  <img alt="Only zero-view videos" src="https://img.shields.io/badge/filter-0%20views-2ea44f">
+  <img alt="At least two hours old" src="https://img.shields.io/badge/age-2h%2B-6f42c1">
+  <img alt="No Shorts" src="https://img.shields.io/badge/shorts-excluded-555">
+  <img alt="Runs on Docker" src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white">
+  <a href="https://github.com/bitm4ncer/UnseenStream/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
+
+<p align="center">
+  <a href="https://buymeacoffee.com/bitmancer"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"></a>
+</p>
+
+---
+
+**[unseen.bitmancer.net](https://unseen.bitmancer.net)** shows one video at a time: zero views, at
+least two hours old, longer than three minutes. As soon as a video has been served it is
+consumed globally, so the next visitor gets something else. The feed mixes YouTube with
+archive.org, and the footer switches between them.
 
 ## How it works
 
-The expensive part of "find unseen videos" is not serving them, it is
-discovering them: one YouTube search request costs 100 quota units, and the
-free daily budget is 10,000. Storing a pool is therefore not the bottleneck —
-quota is.
-
-UnseenStream splits the two:
+The expensive part of "find unseen videos" is not serving them, it is discovering them: one
+YouTube search request costs 100 quota units and the free daily budget is 10,000. Storing a
+pool is therefore not the bottleneck, quota is.
 
 ```
-YouTube Data API  ──100 units──▶  discoverer  ──▶  channels (SQLite)
-                                                        │
-YouTube RSS       ──0 units────▶  poller      ◀────────┘
-                                                        │
-Internet Archive  ──0 units────▶  archive     ◀────────┘
-                                                        │
-                                                  videos (SQLite)
-                                                        │
-                                      api  ◀────────────┘
-                                        │
-                                      Caddy ──▶ browser
+YouTube Data API  --100 units-->  discoverer  -->  channels (SQLite)
+YouTube RSS       ---0 units--->  poller      <--
+Internet Archive  ---0 units--->  archive     <--
+                                      |
+                                videos (SQLite)
+                                      |
+                        api  <--------
+                          |
+                        Caddy  -->  browser
 ```
 
 | Component | Job | Cost |
 |---|---|---|
 | `us-discoverer` | 4 searches per hour, enriched with `videos.list`, writes channels to the watchlist | ~9,700 units/day |
-| `us-poller` | polls channel RSS feeds (views included), keeps candidates fresh | no API quota |
-| `archive` | pulls fresh `mediatype:movies` items with `downloads: 0` from archive.org, stores the direct MP4 URL | no API key, polite rate limit |
-| `us-api` | weighted random selection, `/current-video`, `/health`, `/stats` | none |
+| `us-poller` | polls channel RSS feeds (views included), keeps candidates fresh, backfills durations | no API quota |
+| `archive` | pulls `mediatype:movies` items with `downloads: 0`, walks whole years backwards, extracts thumbnails with ffmpeg | no API key, polite rate limit |
+| `us-api` | selection, `/current-video`, downloads, counters, static frontend | none |
 
-All providers land in the same `videos` table; the API filters by the
-`source` field sent from the frontend (`all`, `youtube`, `archive`, or a
-comma-separated subset), which is also the toggle in the footer.
+YouTube and archive.org land in the same `videos` table. The API filters by the `source`
+field the frontend sends (`all`, `youtube`, `archive`, or a comma-separated subset).
 
-**Every video is served once.** Selection and consumption happen under one
-lock, the row gets `served = 1`, and the pool query only returns
-`served = 0`. A video that someone has seen anywhere on the site never
-appears for anyone else.
+## What gets served
 
-Because RSS polling is free, a quota outage only pauses discovery — the feed
-keeps working. Channels are tiered by hit rate (`hot` 10 min, `warm` 1 h,
-`cold` 6 h) and dropped after five consecutive feed failures, so dead
-channels clean themselves out.
+- **Zero views only.** `US_SERVE_MAX_VIEWS=0`; discovery still tracks channels up to 100 views.
+- **Between 2 and 48 hours old.** Filters run at request time, so a video found at 20 minutes
+  becomes eligible by itself instead of being lost.
+- **Longer than 180 seconds.** RSS carries no duration, so an enricher backfills it in batches
+  of 50 from `videos.list`; anything at or below the limit never appears.
+- **Once, globally.** Selection and consumption happen under one lock, the row gets
+  `served = 1`, and the pool query only returns `served = 0`.
+- **Live view counts.** The count refreshes when a video is served and again every minute
+  while it plays (throttled to one API call per video per 20 s).
 
-## Quick start
+## Features
 
-```bash
-cp .env.example .env          # add YOUTUBE_API_KEY
-docker compose up -d --build
-curl localhost/health         # via your reverse proxy, or:
-docker exec us-api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/health').read())"
+- **Swipe feed** vertical swipe on mobile, arrow keys and buttons on desktop, three videos
+  prefetched ahead.
+- **Smooth timeline** click or drag to seek, works for both players, 3 px track with a
+  draggable playhead.
+- **Two sources, one feed** YouTube and archive.org, switchable in the footer.
+- **Sorting** `Old` surfaces the oldest unseen uploads, `New` the freshest.
+- **Uploader cooldown** the last 50 channels are remembered per browser, so the same uploader
+  does not show up twice in a row.
+- **Share links** copy the real source URL (`youtube.com/watch?v=…` or
+  `archive.org/details/…`); `/?v=<id>` also deep-links a video inside UnseenStream.
+- **Library** heart videos, reopen them later, and export everything as JSON.
+- **Downloads** archive.org files directly, YouTube through the server (`yt-dlp`).
+- **Unseen counter** the footer shows how many unseen videos are left, live.
+- **PWA** installable, red-on-white icon, standalone display.
+
+## Domain
+
+`https://unseen.bitmancer.net` is the site. The old `unseenstream.bitmancer.net` host still
+reaches the same container but returns `web/migrate.html`, which copies `localStorage` (saved
+videos, seen list, settings) into the new origin through the URL hash and then redirects. Old
+bookmarks keep working and land with their library intact.
+
+## Downloads
+
+archive.org items redirect straight to the public MP4. YouTube has no file URL, so the API
+pulls the video with `yt-dlp` (best stream up to 720p, merged to MP4) and streams it back.
+
+YouTube challenges datacenter IPs with "confirm you're not a bot". The API retries with the
+`tv_embedded` client and, when present, uses cookies:
+
+```
+/opt/unseenstream/data/youtube-cookies.txt   # Netscape format, readable by uid 10001
 ```
 
-Optionally seed the watchlist from an existing video pool:
+Without cookies some videos stay blocked; the browser shows a toast instead of an error page.
 
-```bash
-docker compose run --rm us-discoverer python -m app.cli seed \
-  --from-pool videos_pool.json --limit 20000
-```
+## Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET\|POST /current-video` | one candidate; POST accepts `excluded_ids`, `exclude_channels`, `source`, `sort` |
+| `GET /video/<id>` | one video by id, `?refresh=1` pulls a fresh view count |
+| `GET /download/<id>` | streams the video (YouTube via yt-dlp, archive.org via redirect) |
+| `GET /sources` | providers this instance can serve |
+| `GET /unseen-count` | size of the in-memory candidate pool, optional `?source=` |
+| `GET /health` | pool size, channels, last discovery, quota used today |
+| `GET /stats` | per-provider counts, tiers, quota, uptime |
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `YOUTUBE_API_KEY` | — | required for discovery |
-| `US_MAX_VIEWS` | `100` | discovery filter: channels that produce low-view videos are kept |
-| `US_SERVE_MAX_VIEWS` | `0` | serving filter: only videos with this many views or fewer |
-| `US_MIN_AGE_HOURS` | `2` | serving filter: ignore videos younger than this |
-| `US_MAX_AGE_HOURS` | `48` | serving filter: ignore videos older than this |
-| `US_MIN_DURATION_S` | `180` | serving filter: exclude Shorts / anything this short |
-| `US_ARCHIVE_ENABLED` | `1` | enable the archive.org source |
-| `US_ARCHIVE_LIMIT` | `200` | items per archive discovery run |
-| `US_ARCHIVE_INTERVAL` | `600` | seconds between archive runs |
 | `US_DAILY_QUOTA` | `9700` | API budget per Pacific day |
 | `US_SEARCHES_PER_HOUR` | `4` | discovery pace |
+| `US_MAX_VIEWS` | `100` | discovery filter: keep channels producing low-view videos |
+| `US_SERVE_MAX_VIEWS` | `0` | serving filter: only videos with this many views |
+| `US_MIN_AGE_HOURS` | `2` | serving filter: ignore younger videos |
+| `US_MAX_AGE_HOURS` | `48` | serving filter: ignore older videos |
+| `US_MIN_DURATION_S` | `180` | serving filter: exclude Shorts |
+| `US_ARCHIVE_ENABLED` | `1` | enable archive.org |
+| `US_ARCHIVE_LIMIT` | `200` | items per archive run |
+| `US_ARCHIVE_INTERVAL` | `600` | seconds between archive runs |
+| `US_ARCHIVE_VINTAGE_START` / `_END` | `2025` / `2015` | years harvested for old unseen items |
+| `US_YTDLP_COOKIES` | `/data/youtube-cookies.txt` | cookie file for YouTube downloads |
 | `US_HOT_INTERVAL` / `US_WARM_INTERVAL` / `US_COLD_INTERVAL` | `600` / `3600` / `21600` | poll intervals |
 | `US_LOG_LEVEL` | `INFO` | logging |
 
-Discovery and serving use different view thresholds on purpose: a channel
-that produced a 40-view video is still worth tracking, but only zero-view
-videos are shown.
-
-## Domain
-
-`https://unseen.bitmancer.net` is the site. The old
-`unseenstream.bitmancer.net` host is still served by the same container but
-returns `web/migrate.html`, a page that copies `localStorage` (saved videos,
-seen list, settings) into the new origin via the URL hash and then redirects
-there. Existing bookmarks therefore keep working and land on the same feed
-with their library intact.
-
-## Downloads
-
-The download button works for both sources. archive.org files are fetched
-directly; YouTube has no public file URL, so the API pulls it with `yt-dlp`
-and streams it back through `GET /download/<id>`.
-
-YouTube challenges datacenter IPs with "confirm you're not a bot". Export
-cookies from a logged-in browser (Netscape format) and place them at
-`/opt/unseenstream/data/youtube-cookies.txt` (readable by uid 10001) to make
-downloads reliable; without cookies the API retries with the `tv_embedded`
-client and still fails for some videos.
-
-## Endpoints
-
-- `GET|POST /current-video` — random candidate; POST accepts
-  `{"excluded_ids": [...]}` to avoid repeats.
-- `GET /download/<id>` — streams a YouTube video through yt-dlp (or
-  redirects archive.org items to their MP4).
-- `GET /video/<id>` — one video by id, so shared links keep working even
-  after the feed has moved on.
-- `GET /sources` — providers this instance can serve.
-- `GET /unseen-count` — size of the in-memory candidate pool.
-- `GET /health` — pool size, channels, last discovery, quota used today.
-- `GET /stats` — tier distribution, quota, uptime.
+Discovery and serving use different view thresholds on purpose: a channel that produced a
+40-view video is still worth tracking, but only zero-view videos are shown.
 
 ## Development
 
@@ -126,18 +151,29 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt   # Windows
 pytest
 python -m app.cli initdb
-python -m app.cli poller --once --dry-run
-python -m app.cli discoverer --once --dry-run
 ```
 
-## Deployment notes
+Roles: `python -m app.cli {seed,discoverer,poller,enrich,bootstrap,verify,initdb}`.
 
-- Runs as three containers with `mem_limit 256m`, `cpus 0.5`, read-only root
-  filesystems and log rotation, behind an existing Caddy instance.
-- The frontend is served by `us-api` itself, so adding the site requires only
-  a Caddy block and a config reload — no extra container, no volume changes.
-- SQLite runs in WAL mode; the three containers share one `./data` directory.
+## Deployment
+
+Docker Compose on a VPS behind Caddy:
+
+```bash
+scp -r app web Dockerfile requirements.txt server:/opt/unseenstream/
+ssh server "cd /opt/unseenstream && docker compose up -d --build"
+```
+
+Three containers share one SQLite volume: `us-api` (Flask, port 8000), `us-poller` and
+`us-discoverer`. Caddy terminates TLS:
+
+```
+unseen.bitmancer.net {
+    encode zstd gzip
+    reverse_proxy us-api:8000
+}
+```
 
 ## License
 
-See `LICENSE`.
+MIT
