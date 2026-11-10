@@ -168,6 +168,15 @@ def health():
     )
 
 
+@app.get("/unseen-count")
+def unseen_count():
+    # Kostenlos: die Laenge des In-Memory-Pools, kein DB-Query solange der
+    # Cache frisch ist (20 s TTL). Sinkt sofort beim Ausliefern.
+    response = jsonify({"count": pool.size()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/current-video", methods=["GET", "POST"])
 def current_video():
     excluded: set[str] = set()

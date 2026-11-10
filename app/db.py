@@ -154,6 +154,17 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def prune_consumed(conn: sqlite3.Connection) -> int:
+    """Zeilen entfernen, die nie wieder ausgeliefert werden koennen.
+
+    Videos mit Views sind draussen, servierte ebenso. Das haelt die Tabelle
+    klein, ohne dass die Zaehlung teurer wird.
+    """
+    cursor = conn.execute("DELETE FROM videos WHERE views > 0 OR served > 0")
+    conn.commit()
+    return cursor.rowcount
+
+
 def quota_day(now: datetime | None = None) -> str:
     """YouTube-Quota resettet um Mitternacht in America/Los_Angeles."""
     moment = (now or utcnow()).astimezone(ZoneInfo("America/Los_Angeles"))

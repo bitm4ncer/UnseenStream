@@ -318,6 +318,7 @@ async function fetchVideos() {
   if (isLoading) return;
 
   isLoading = true;
+  let fetched = 0;
   const loadingEl = document.getElementById('loading');
   loadingEl.classList.remove('hidden');
   loadingEl.textContent = 'Loading videos...';
@@ -333,6 +334,7 @@ async function fetchVideos() {
 
       videoQueue.push(video);
       rememberChannel(video);
+      fetched++;
 
       if (!currentVideo) {
         currentIndex = 0;
@@ -355,6 +357,7 @@ async function fetchVideos() {
     loadingEl.style.color = '#ff4444';
   } finally {
     isLoading = false;
+    if (fetched) refreshUnseenCount();
   }
 }
 
@@ -981,6 +984,30 @@ if (nativePlayerEl) {
 }
 
 // ============================================
+// Unseen Counter
+// ============================================
+
+const unseenCountEl = document.getElementById('unseen-count');
+
+async function refreshUnseenCount() {
+  if (!unseenCountEl) return;
+
+  try {
+    const response = await fetch('/unseen-count', { cache: 'no-store' });
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (typeof data.count !== 'number') return;
+
+    unseenCountEl.textContent = `${data.count.toLocaleString('en-US')} unseen`;
+  } catch (error) {
+    /* Zaehler ist ein Gimmick, Fehler bleiben still. */
+  }
+}
+
+setInterval(refreshUnseenCount, 15000);
+
+// ============================================
 // Timeline / Scrubber
 // ============================================
 
@@ -1100,5 +1127,6 @@ window.addEventListener('load', async () => {
   // Check for first visit
   checkFirstVisit();
 
+  refreshUnseenCount();
   await fetchVideos();
 });

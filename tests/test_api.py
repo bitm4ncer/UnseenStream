@@ -205,6 +205,29 @@ def test_exclude_channels_falls_back_when_all_match(connection):
     assert payload["id"] == "a"
 
 
+def test_unseen_count_matches_pool(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0)
+    _insert_video(connection, "b", 0)
+    _insert_video(connection, "viewed", 5)
+
+    client = api.app.test_client()
+    assert client.get("/unseen-count").get_json()["count"] == 2
+
+    client.get("/current-video")
+    assert client.get("/unseen-count").get_json()["count"] == 1
+
+
+def test_unseen_count_is_not_cached(connection):
+    _reset_pool()
+    _insert_video(connection, "a", 0)
+
+    client = api.app.test_client()
+    response = client.get("/unseen-count")
+
+    assert response.headers["Cache-Control"] == "no-store"
+
+
 def test_response_includes_provider(connection):
     _reset_pool()
     _insert_video(connection, "ar", 0, provider="archive")

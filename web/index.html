@@ -81,6 +81,7 @@
         </div>
 
         <div class="controls-side controls-right">
+          <span id="unseen-count" class="unseen-count">—</span>
           <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay next video">Autoplay</button>
         </div>
       </div>
@@ -95,9 +96,10 @@
 
   <div id="welcome-modal" class="modal">
     <div class="modal-content">
-      <h2>Every video here has exactly one viewer.</h2>
-      <p class="lede">Most uploads on YouTube and archive.org are never seen by anyone. Unseen Stream shows them to you before someone else opens them, then takes them out of the feed.</p>
-      <p class="body">Swipe up for the next one. What you have seen is gone for everyone else.</p>
+      <img class="modal-mark" src="/favicon.svg" alt="Unseen Stream" width="64" height="64">
+      <h2>Every video here has no views.</h2>
+      <p class="lede">Be the first person on the internet to watch them.</p>
+      <p class="body">Swipe up for the next one. Once you have seen a video, it is gone for everyone else.</p>
       <button class="primary-btn" onclick="closeWelcome()">Start watching</button>
     </div>
   </div>

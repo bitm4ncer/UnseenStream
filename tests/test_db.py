@@ -38,3 +38,25 @@ def test_meta_roundtrip(connection):
     assert db.get_meta(connection, "missing") is None
     db.set_meta(connection, "term_index", "7")
     assert db.get_meta(connection, "term_index") == "7"
+
+def test_prune_removes_viewed_and_consumed(connection):
+    now = db.utcnow()
+    rows = [
+        ("clean", 0, 0),
+        ("viewed", 7, 0),
+        ("served", 0, 1),
+    ]
+    for video_id, views, served in rows:
+        connection.execute(
+            """
+            INSERT INTO videos (id, title, views, served, published_at,
+                                discovered_at, last_seen, source)
+            VALUES (?, 'T', ?, ?, ?, ?, ?, 'rss')
+            """,
+            (video_id, views, served, db.iso(now), db.iso(now), db.iso(now)),
+        )
+    connection.commit()
+
+    assert db.prune_consumed(connection) == 2
+    remaining = [row[0] for row in connection.execute("SELECT id FROM videos")]
+    assert remaining == ["clean"]

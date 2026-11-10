@@ -363,8 +363,20 @@ def run(once: bool = False, dry_run: bool = False) -> None:
         threading.Thread(target=_archive_forever, daemon=True).start()
         threading.Thread(target=_thumb_forever, daemon=True).start()
 
+    last_prune = 0.0
     while True:
         stats = poll_cycle(conn, dry_run=dry_run)
+
+        # Alle fuenf Minuten alles loeschen, was nie wieder ausgeliefert wird.
+        if time.time() - last_prune > 300:
+            last_prune = time.time()
+            try:
+                removed = db.prune_consumed(conn)
+                if removed:
+                    logger.info("%d verbrauchte Zeilen entfernt", removed)
+            except Exception:  # pragma: no cover - nur Logging
+                logger.exception("Prune fehlgeschlagen")
+
         if stats.get("outage"):
             time.sleep(120)
         else:

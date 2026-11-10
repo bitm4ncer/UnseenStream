@@ -435,6 +435,14 @@ body:not(.controls-visible) #overlay {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
+.unseen-count {
+  margin-right: 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 #autoplay-btn:hover {
   color: var(--text);
 }
@@ -575,6 +583,13 @@ body:not(.controls-visible) #overlay {
   padding: 26px;
   border-radius: 22px;
   background: var(--surface);
+}
+
+.modal-mark {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 18px;
 }
 
 .modal h2 {
