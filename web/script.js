@@ -357,6 +357,7 @@ function loadVideo(video, direction = 'next') {
   const playerElement = document.getElementById('player');
   const nativePlayer = document.getElementById('native-player');
   currentProvider = video.provider || 'youtube';
+  resetTimeline();
 
   const playPauseBtn = document.getElementById('play-pause-btn');
   if (playPauseBtn) {
@@ -497,11 +498,14 @@ function previousVideo() {
 const container = document.getElementById('video-container');
 
 container.addEventListener('touchstart', (e) => {
+  // Beruehrungen in der Fussleiste (Timeline, Buttons) sind keine Swipes.
+  if (e.target.closest('#controls')) return;
   touchStartX = e.changedTouches[0].screenX;
   touchStartY = e.changedTouches[0].screenY;
 }, { passive: true });
 
 container.addEventListener('touchend', (e) => {
+  if (e.target.closest('#controls')) return;
   touchEndX = e.changedTouches[0].screenX;
   touchEndY = e.changedTouches[0].screenY;
   handleSwipe();
@@ -887,6 +891,112 @@ if (nativePlayerEl) {
     nextVideo();
   });
 }
+
+// ============================================
+// Timeline / Scrubber
+// ============================================
+
+const timelineEl = document.getElementById('timeline');
+const timelineFill = document.getElementById('timeline-fill');
+const timelineHead = document.getElementById('timeline-head');
+let isScrubbing = false;
+
+function mediaTime() {
+  if (currentProvider === 'archive') {
+    const video = document.getElementById('native-player');
+    if (!video || !isFinite(video.duration) || video.duration <= 0) return null;
+    return { current: video.currentTime, duration: video.duration };
+  }
+
+  if (!player || typeof player.getDuration !== 'function') return null;
+  const duration = player.getDuration();
+  if (!isFinite(duration) || duration <= 0) return null;
+  return { current: player.getCurrentTime() || 0, duration };
+}
+
+function paintTimeline(fraction) {
+  const percent = `${Math.min(1, Math.max(0, fraction)) * 100}%`;
+  timelineFill.style.width = percent;
+  timelineHead.style.left = percent;
+  if (timelineEl) {
+    timelineEl.setAttribute('aria-valuenow', String(Math.round(fraction * 100)));
+  }
+}
+
+function updateTimeline() {
+  if (isScrubbing) return;
+  const time = mediaTime();
+  if (!time) return;
+  paintTimeline(time.current / time.duration);
+}
+
+function resetTimeline() {
+  paintTimeline(0);
+}
+
+function seekToFraction(fraction) {
+  const time = mediaTime();
+  if (!time) return;
+
+  const clamped = Math.min(0.999, Math.max(0, fraction));
+  const target = clamped * time.duration;
+
+  if (currentProvider === 'archive') {
+    const video = document.getElementById('native-player');
+    if (video) video.currentTime = target;
+  } else if (player && typeof player.seekTo === 'function') {
+    player.seekTo(target, true);
+  }
+
+  paintTimeline(clamped);
+}
+
+function fractionFromPointer(event) {
+  const rect = timelineEl.getBoundingClientRect();
+  if (!rect.width) return 0;
+  return Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+}
+
+if (timelineEl) {
+  timelineEl.addEventListener('pointerdown', (event) => {
+    if (!mediaTime()) return;
+    isScrubbing = true;
+    timelineEl.classList.add('dragging');
+    timelineEl.setPointerCapture(event.pointerId);
+    seekToFraction(fractionFromPointer(event));
+  });
+
+  timelineEl.addEventListener('pointermove', (event) => {
+    if (!isScrubbing) return;
+    seekToFraction(fractionFromPointer(event));
+  });
+
+  const endScrub = (event) => {
+    if (!isScrubbing) return;
+    isScrubbing = false;
+    timelineEl.classList.remove('dragging');
+    seekToFraction(fractionFromPointer(event));
+  };
+
+  timelineEl.addEventListener('pointerup', endScrub);
+  timelineEl.addEventListener('pointercancel', () => {
+    isScrubbing = false;
+    timelineEl.classList.remove('dragging');
+  });
+
+  timelineEl.addEventListener('keydown', (event) => {
+    const time = mediaTime();
+    if (!time) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = event.key === 'ArrowRight' ? 5 : -5;
+    seekToFraction((time.current + delta) / time.duration);
+  });
+}
+
+setInterval(updateTimeline, 250);
 
 // ============================================
 // Initialization

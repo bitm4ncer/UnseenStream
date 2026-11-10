@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cannot collide with them.
 - The next three videos are queued and buffered ahead (hidden YouTube
   players for YouTube, hidden `<video>` elements for archive files).
+- Timeline with a draggable playhead above the footer, working for both
+  providers; arrow keys seek when the timeline has focus.
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only
