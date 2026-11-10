@@ -143,6 +143,26 @@ body.controls-visible #video-container {
   min-width: 0;
   max-width: 35%;
   text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#brand-mark {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
+#brand-mark:hover {
+  opacity: 0.9;
+}
+
+#video-info-text {
+  flex: 1;
+  min-width: 0;
 }
 
 #video-title {
@@ -650,6 +670,7 @@ body.controls-visible #fade-btn {
     order: 2;
     max-width: 100%;
     text-align: center;
+    justify-content: center;
   }
 
   .action-buttons {
