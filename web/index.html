@@ -16,20 +16,8 @@
     <div id="loading">Suchen…</div>
     <div id="player" style="visibility: hidden;"></div>
     <video id="native-player" playsinline preload="metadata"></video>
-    <div id="preload-player"></div>
 
     <div id="overlay">
-      <div id="video-info">
-        <img id="brand-mark" src="/favicon.svg" alt="" width="22" height="22">
-        <div id="video-info-text">
-          <h1 id="video-title">Loading…</h1>
-          <div class="meta-row">
-            <span id="video-source" class="source-badge">YouTube</span>
-            <p id="video-stats"></p>
-          </div>
-        </div>
-      </div>
-
       <div class="action-rail">
         <button id="heart-btn" onclick="toggleSave()" title="Save video" aria-label="Save video">♡</button>
         <button id="library-btn" onclick="openSaved()" title="Saved videos" aria-label="Saved videos">
@@ -42,33 +30,46 @@
     </div>
 
     <div id="controls">
-      <div class="controls-side controls-left">
-        <div id="source-toggle" role="group" aria-label="Source">
-          <button type="button" data-source="all" class="active">All</button>
-          <button type="button" data-source="youtube">YouTube</button>
-          <button type="button" data-source="archive">Archive</button>
+      <div class="footer-info">
+        <img id="brand-mark" src="/favicon.svg" alt="" width="22" height="22">
+        <div id="video-info-text">
+          <h1 id="video-title">Loading…</h1>
+          <div class="meta-row">
+            <span id="video-source" class="source-badge">YouTube</span>
+            <p id="video-stats"></p>
+          </div>
         </div>
       </div>
 
-      <div class="nav-buttons">
-        <button id="prev-btn" class="icon-btn" onclick="previousVideo()" title="Previous (←)" aria-label="Previous video">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 18l-6-6 6-6"/>
-          </svg>
-        </button>
-        <button id="play-pause-btn" class="play-btn" onclick="togglePlayPause()" title="Play / Pause (Space)" aria-label="Play or pause">
-          <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-        </button>
-        <button id="next-btn" class="icon-btn" onclick="nextVideo()" title="Next (→)" aria-label="Next video">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 6l6 6-6 6"/>
-          </svg>
-        </button>
-      </div>
+      <div class="footer-controls">
+        <div class="controls-side controls-left">
+          <div id="source-toggle" role="group" aria-label="Source">
+            <button type="button" data-source="all" class="active">All</button>
+            <button type="button" data-source="youtube">YouTube</button>
+            <button type="button" data-source="archive">Archive</button>
+          </div>
+        </div>
 
-      <div class="controls-side controls-right">
-        <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay next video">Autoplay</button>
+        <div class="nav-buttons">
+          <button id="prev-btn" class="icon-btn" onclick="previousVideo()" title="Previous (←)" aria-label="Previous video">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
+          <button id="play-pause-btn" class="play-btn" onclick="togglePlayPause()" title="Play / Pause (Space)" aria-label="Play or pause">
+            <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+          </button>
+          <button id="next-btn" class="icon-btn" onclick="nextVideo()" title="Next (→)" aria-label="Next video">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 6l6 6-6 6"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="controls-side controls-right">
+          <button id="autoplay-btn" onclick="toggleAutoplay()" title="Autoplay next video">Autoplay</button>
+        </div>
       </div>
     </div>
 

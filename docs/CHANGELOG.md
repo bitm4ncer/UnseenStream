@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - archive.org items without a real preview image get a frame extracted from
   the MP4 with ffmpeg and stored as a data URI, instead of the generic
   placeholder icon.
+- Title and meta moved into the footer so the YouTube player's own overlays
+  cannot collide with them.
+- The next three videos are queued and buffered ahead (hidden YouTube
+  players for YouTube, hidden `<video>` elements for archive files).
 - Quota accounting per Pacific day (`quota` table), default budget 9,700 of
   10,000 units.
 - `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only

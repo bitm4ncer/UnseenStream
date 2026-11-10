@@ -7,10 +7,13 @@ const API_BASE = '';
 
 // State
 let player;
-let preloadPlayer;
 let videoQueue = [];
 let currentIndex = 0;
 let currentVideo = null;
+
+// Anzahl der Videos, die im Hintergrund gepuffert werden.
+const PRELOAD_AHEAD = 3;
+const preloadSlots = [];
 let touchStartX = 0;
 let touchStartY = 0;
 let touchEndX = 0;
@@ -118,19 +121,8 @@ function onYouTubeIframeAPIReady() {  player = new YT.Player('player', {
     }
   });
 
-  // Create preload player (hidden, for buffering next video)
-  preloadPlayer = new YT.Player('preload-player', {
-    height: '100%',
-    width: '100%',
-    playerVars: {
-      autoplay: 0,
-      controls: 0,
-      modestbranding: 1,
-      rel: 0,
-      playsinline: 1,
-      cc_load_policy: 0
-    }
-  });
+  // Drei versteckte Slots: je ein YouTube-Player und ein natives Video.
+  createPreloadSlots();
 }
 
 function onPlayerReady(event) {
@@ -150,9 +142,9 @@ function onPlayerStateChange(event) {
   // Update play/pause button
   updatePlayPauseButton();
 
-  // Preload next video when current video starts playing
+  // Queue nachfuellen, sobald das Video laeuft
   if (event.data === YT.PlayerState.PLAYING) {
-    preloadNextVideo();
+    preloadUpcoming();
   }
 
   // Autoplay: move to next video when current video ends
@@ -167,20 +159,144 @@ function onPlayerError(event) {
   setTimeout(() => nextVideo(), 300);
 }
 
-function preloadNextVideo() {
-  const nextIndex = currentIndex + 1;
+function createPreloadSlots() {
+  for (let index = 0; index < PRELOAD_AHEAD; index++) {
+    const host = document.createElement('div');
+    host.id = `preload-yt-${index}`;
+    host.style.cssText =
+      'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
+    document.body.appendChild(host);
 
-  // Check if there's a next video to preload
-  if (nextIndex < videoQueue.length) {
-    const nextVideo = videoQueue[nextIndex];
-    if (nextVideo && preloadPlayer && nextVideo.provider !== 'archive') {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'auto';
+    video.playsInline = true;
+    video.style.cssText =
+      'position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none;';
+    document.body.appendChild(video);
+
+    const slot = {
+      yt: null,
+      ready: false,
+      pendingId: null,
+      video,
+      currentId: null,
+      currentUrl: null,
+    };
+
+    try {
+      slot.yt = new YT.Player(host.id, {
+      height: '1',
+      width: '1',
+      playerVars: {
+        autoplay: 0,
+        controls: 0,
+        disablekb: 1,
+        modestbranding: 1,
+        rel: 0,
+        playsinline: 1,
+        cc_load_policy: 0,
+      },
+      events: {
+        onReady: () => {
+          slot.ready = true;
+          if (slot.pendingId) {
+            const id = slot.pendingId;
+            slot.pendingId = null;
+            try {
+              slot.yt.cueVideoById(id);
+            } catch (error) {
+              /* Slot bleibt leer */
+            }
+          }
+        },
+      },
+    });
+    } catch (error) {
+      console.warn('Preload-Slot konnte nicht erstellt werden:', error);
+    }
+
+    preloadSlots.push(slot);
+  }
+}
+
+function clearPreloadSlot(slot) {
+  if (!slot) return;
+
+  if (slot.currentUrl) {
+    slot.video.pause();
+    slot.video.removeAttribute('src');
+    slot.video.load();
+    slot.currentUrl = null;
+  }
+
+  if (slot.currentId) {
+    if (slot.yt) {
       try {
-        // Use cueVideoById to preload without playing
-        preloadPlayer.cueVideoById(nextVideo.id.videoId);
-        console.log('Preloading next video:', nextVideo.snippet.title);
+        slot.yt.stopVideo();
       } catch (error) {
-        console.error('Error preloading video:', error);
+        /* Player evtl. noch nicht bereit */
       }
+    }
+    slot.currentId = null;
+  }
+}
+
+function preloadUpcoming() {
+  for (let offset = 0; offset < PRELOAD_AHEAD; offset++) {
+    const slot = preloadSlots[offset];
+    if (!slot) continue;
+
+    const video = videoQueue[currentIndex + 1 + offset];
+    if (!video) {
+      clearPreloadSlot(slot);
+      continue;
+    }
+
+    if (video.provider === 'archive') {
+      if (!video.mediaUrl) {
+        clearPreloadSlot(slot);
+        continue;
+      }
+      if (slot.currentUrl === video.mediaUrl) continue;
+
+      if (slot.currentId) {
+        if (slot.yt) {
+          try {
+            slot.yt.stopVideo();
+          } catch (error) {
+            /* ignorieren */
+          }
+        }
+        slot.currentId = null;
+      }
+
+      slot.video.src = video.mediaUrl;
+      slot.video.load();
+      slot.currentUrl = video.mediaUrl;
+      continue;
+    }
+
+    const id = video.id.videoId;
+    if (slot.currentId === id) continue;
+
+    if (slot.currentUrl) {
+      slot.video.pause();
+      slot.video.removeAttribute('src');
+      slot.video.load();
+      slot.currentUrl = null;
+    }
+
+    slot.currentId = id;
+    if (!slot.yt) continue;
+    if (slot.ready) {
+      try {
+        slot.yt.cueVideoById(id);
+      } catch (error) {
+        /* ignorieren */
+      }
+    } else {
+      slot.pendingId = id;
     }
   }
 }
@@ -199,25 +315,29 @@ async function fetchVideos() {
   loadingEl.style.color = 'rgba(255, 255, 255, 0.7)';
 
   try {
-    const video = await fetchNextVideo();
+    // Auffuellen bis drei Videos voraus gepuffert sind. Jeder Abruf
+    // verbraucht serverseitig ein Video, deshalb genau die Tiefe, die
+    // wirklich gebraucht wird.
+    while (videoQueue.length - currentIndex - 1 < PRELOAD_AHEAD) {
+      const video = await fetchNextVideo();
+      if (!video) break;
 
-    if (video && video.status === 503) {
-      loadingEl.textContent =
-        'Noch keine Videos im Pool – der Sammler läuft gerade an.';
-      setTimeout(() => fetchVideos(), 5000);
-      return;
-    }
-
-    if (video) {
       videoQueue.push(video);
-      if (!currentVideo && videoQueue.length > 0) {
+
+      if (!currentVideo) {
+        currentIndex = 0;
         loadVideo(videoQueue[0]);
       }
+
       updateNavigationButtons();
+      preloadUpcoming();
+    }
+
+    if (videoQueue.length > 0) {
       loadingEl.classList.add('hidden');
     } else {
-      loadingEl.textContent = 'Video konnte nicht geladen werden. Nochmal versuchen?';
-      loadingEl.style.color = '#ff4444';
+      loadingEl.textContent =
+        'Noch keine Videos im Pool – der Sammler läuft gerade an.';
     }
   } catch (error) {
     console.error('Error fetching videos:', error);
@@ -317,6 +437,7 @@ function loadVideo(video, direction = 'next') {
 
     updateHeartButton();
     updateNavigationButtons();
+    preloadUpcoming();
 
     // Add slide-in animation
     playerElement.className = slideInClass;
@@ -350,17 +471,12 @@ function updateNavigationButtons() {
 function nextVideo() {
   currentIndex++;
 
-  // Fetch more videos if running low (only 2 videos left)
-  if (currentIndex >= videoQueue.length - 2 && !isLoading) {
-    fetchVideos();
-  }
-
   if (currentIndex < videoQueue.length) {
     loadVideo(videoQueue[currentIndex], 'next');
-  } else if (!isLoading) {
-    fetchVideos();
   }
 
+  preloadUpcoming();
+  fetchVideos();
   updateNavigationButtons();
 }
 
@@ -370,6 +486,7 @@ function previousVideo() {
     loadVideo(videoQueue[currentIndex], 'prev');
   }
 
+  preloadUpcoming();
   updateNavigationButtons();
 }
 
@@ -723,6 +840,8 @@ function setSource(source) {
   currentIndex = 0;
   currentVideo = null;
   isLoading = false;
+
+  preloadSlots.forEach(clearPreloadSlot);
 
   document.body.classList.remove('archive-mode');
   const nativePlayer = document.getElementById('native-player');
