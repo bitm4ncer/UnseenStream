@@ -1,208 +1,94 @@
-# UnseenStream v0.1
+# UnseenStream
 
-A TikTok-style interface for discovering truly unseen YouTube videos. Serves ultra-fresh
-content with 0-1 views that most people will never see - raw, unfiltered, and completely random.
+A TikTok-style feed of YouTube videos almost nobody has seen: 0 to 100 views,
+raw and unpolished. Live at **https://unseenstream.bitmancer.net**.
 
-Live Demo: https://bitm4ncer.github.io/UnseenStream/
+## How it works
 
-## Overview
+The expensive part of "find unseen videos" is not serving them, it is
+discovering them: one YouTube search request costs 100 quota units, and the
+free daily budget is 10,000. Storing a pool is therefore not the bottleneck —
+quota is.
 
-UnseenStream streams videos with 0-100 views from a Flask backend API hosted on Render.com,
-with videos rotated every 1 second for truly random, never-before-seen content.
-
-The backend maintains a pool of up to 50,000 ultra-fresh videos (uploaded within the last 6 hours),
-automatically refreshed hourly via GitHub Actions.
-
-## Quick Start
-
-### Deployment (Required)
-
-1. Fork this repository
-2. Get a YouTube API Key from Google Cloud Console
-3. Add API key as GitHub Secret: YOUTUBE_API_KEY
-4. Sign up at Render.com (free tier)
-5. Deploy API server using render.yaml (auto-deployment)
-6. Deploy frontend to GitHub Pages
-7. Configure Render API URL in frontend settings
-8. Set up keepalive pings (e.g., UptimeRobot) every 14 minutes for 24/7 operation
-
-Full deployment guide: docs/RENDER_DEPLOYMENT.md
-
-### Cold Start Behavior
-
-When the Render.com free tier server sleeps after 15 minutes of inactivity:
-- Frontend automatically detects cold start
-- Shows countdown timer and progress bar (up to 90 seconds)
-- Begins serving videos once server is ready
-
-## Features
-
-CORE FUNCTIONALITY
-- Mobile & Desktop: Swipe gestures + keyboard controls + navigation buttons
-- Save Videos: Heart button to bookmark interesting finds
-- Cold Start Detection: Automatic server wake-up with visual feedback
-- Hourly Updates: GitHub Actions scrapes new videos every hour
-- Ultra-Fresh Content: Videos with 0-100 views, weighted toward 0 views
-- No Duplicates: Tracks viewed videos to ensure fresh content per user
-
-HOW IT WORKS
-- Render.com backend serves videos with 0-100 views
-- Weighted random selection: 0 views = highest priority, 100 views = lowest
-- Pool of up to 50,000 constantly refreshed videos
-- Discovers videos uploaded within last hour
-- 1-second rotation for maximum randomness
-- Duplicate prevention via LocalStorage tracking
-- Free tier with keepalive pings for 24/7 operation
-
-GITHUB ACTIONS AUTOMATION
-- Runs every hour (distributed quota usage)
-- Discovers ultra-fresh videos (uploaded in last 6 hours)
-- Maintains pool of up to 50,000 videos with 0-100 views
-- Removes videos when views exceed 100
-- Uses approximately 6,400 quota units/day (64% of free quota)
-
-## Controls
-
-MOBILE
-- Swipe Up: Next video
-- Swipe Down: Previous video
-- Heart Button: Save current video
-- Settings: Adjust preferences
-- Library: View saved videos
-
-DESKTOP
-- Keyboard: Arrow keys (up/right = next, down/left = previous), S = save
-- On-screen Buttons: Click arrows on sides of video
-- Mouse: Click heart to save
-
-## Technical Details
-
-ARCHITECTURE
-- Frontend: Single-page HTML/CSS/JS application (GitHub Pages)
-- Backend: Flask API server on Render.com (required)
-- Automation: GitHub Actions for hourly video discovery
-- Storage: LocalStorage for preferences and saved videos
-
-VIDEO DISCOVERY & SELECTION
-- Random search queries with geographic and language diversity
-- Filters for videos uploaded within last 6 hours
-- Only serves videos with 0-100 views
-- Weighted random selection algorithm:
-  * 0 views = weight 101 (highest priority)
-  * 100 views = weight 1 (lowest priority)
-  * Maintains randomness while favoring fresher content
-- Duplicate prevention: tracks up to 1000 viewed videos per user
-- Backend rotates current video every 1 second
-- Frontend fetches new video on each swipe
-- Discovers ~270 new videos per hour
-
-API USAGE (GitHub Actions)
-- 6 searches per hour = 6,000 quota units/day
-- View count checks = approximately 400 units/day
-- Total: approximately 6,400 units/day (3,600 units buffer remaining)
-
-## File Structure
+UnseenStream splits the two:
 
 ```
-UnseenStream/
-├── index.html                   # Main application
-├── script.js                    # Frontend logic with cold-start detection
-├── styles.css                   # Styling
-├── videos_pool.json             # Fresh 0-100 view videos pool (for Render API)
-│
-├── api/                         # Render.com backend (required)
-│   ├── api_server.py            # Flask API server with advanced logging
-│   └── requirements.txt         # Python dependencies
-│
-├── scripts/                     # GitHub Actions automation
-│   ├── video_discovery.py       # Discovers 0-100 view videos (6 searches/hour)
-│   └── requirements.txt         # Python dependencies
-│
-├── .github/workflows/
-│   └── scrape-videos.yml        # Hourly automation workflow
-│
-├── docs/
-│   ├── CLAUDE.md                # Developer guide for Claude Code
-│   ├── CHANGELOG.md             # Version history
-│   ├── DEPLOYMENT_GUIDE.md      # Detailed deployment instructions
-│   └── RENDER_DEPLOYMENT.md     # Render.com setup guide
-│
-└── render.yaml                  # Render.com configuration
+YouTube Data API  ──100 units──▶  discoverer  ──▶  channels (SQLite)
+                                                        │
+YouTube RSS       ──0 units────▶  poller      ◀────────┘
+                                                        │
+                                                  videos (SQLite)
+                                                        │
+                                      api  ◀────────────┘
+                                        │
+                                      Caddy ──▶ browser
 ```
 
-## Deployment
+| Component | Job | Cost |
+|---|---|---|
+| `us-discoverer` | 4 searches per hour, enriched with `videos.list`, writes channels to the watchlist | ~9,700 units/day |
+| `us-poller` | polls channel RSS feeds (views included), keeps candidates fresh | no API quota |
+| `us-api` | weighted random selection, `/current-video`, `/health`, `/stats` | none |
 
-GITHUB PAGES (Frontend Deployment)
-1. Push to repository
-2. Go to Settings > Pages
-3. Select source: Deploy from main branch
-4. Access at: https://username.github.io/UnseenStream/
-5. Configure Render API URL in settings (https://your-app.onrender.com)
+Because RSS polling is free, a quota outage only pauses discovery — the feed
+keeps working. Channels are tiered by hit rate (`hot` 10 min, `warm` 1 h,
+`cold` 6 h) and dropped after five consecutive feed failures, so dead
+channels clean themselves out.
 
-RENDER.COM (Backend Deployment - Required)
-1. Create Web Service on Render.com
-2. Connect GitHub repository
-3. Set environment variable: GITHUB_REPO=username/UnseenStream
-4. Auto-deploys from render.yaml
-5. Set up keepalive pings (e.g., UptimeRobot) every 14 minutes for 24/7 operation
+## Quick start
 
-GITHUB ACTIONS (Automatic Video Discovery)
-1. Add repository secret: YOUTUBE_API_KEY
-2. Workflow runs automatically every hour
-3. Commits updated videos_pool.json to repository
+```bash
+cp .env.example .env          # add YOUTUBE_API_KEY
+docker compose up -d --build
+curl localhost/health         # via your reverse proxy, or:
+docker exec us-api python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8000/health').read())"
+```
+
+Optionally seed the watchlist from an existing video pool:
+
+```bash
+docker compose run --rm us-discoverer python -m app.cli seed \
+  --from-pool videos_pool.json --limit 20000
+```
 
 ## Configuration
 
-Default preferences can be modified in script.js:
+| Variable | Default | Meaning |
+|---|---|---|
+| `YOUTUBE_API_KEY` | — | required for discovery |
+| `US_MAX_VIEWS` | `100` | upper view limit |
+| `US_MAX_AGE_HOURS` | `48` | candidate age window |
+| `US_DAILY_QUOTA` | `9700` | API budget per Pacific day |
+| `US_SEARCHES_PER_HOUR` | `4` | discovery pace |
+| `US_HOT_INTERVAL` / `US_WARM_INTERVAL` / `US_COLD_INTERVAL` | `600` / `3600` / `21600` | poll intervals |
+| `US_LOG_LEVEL` | `INFO` | logging |
 
-```javascript
-const DEFAULT_PREFERENCES = {
-  maxViews: 1000,
-  minViews: 0,
-  dateRange: 7,
-  patterns: ['DSC', 'IMG', 'MOV', 'VID']
-};
-```
+## Endpoints
+
+- `GET|POST /current-video` — random candidate; POST accepts
+  `{"excluded_ids": [...]}` to avoid repeats.
+- `GET /health` — pool size, channels, last discovery, quota used today.
+- `GET /stats` — tier distribution, quota, uptime.
 
 ## Development
 
-LOCAL TESTING
 ```bash
-# Serve static files
-python -m http.server 8000
-# Open http://localhost:8000
-
-# Test video discovery script
-export YOUTUBE_API_KEY="your_api_key_here"
-python scripts/video_discovery.py
-
-# Test API server locally
-cd api && python api_server.py
-# Server runs on http://localhost:5000
+python -m venv .venv
+.venv/Scripts/pip install -r requirements-dev.txt   # Windows
+pytest
+python -m app.cli initdb
+python -m app.cli poller --once --dry-run
+python -m app.cli discoverer --once --dry-run
 ```
 
-## Privacy & Security
+## Deployment notes
 
-- No user data collection
-- No tracking or analytics
-- No cookies except localStorage
-- API keys stored only in browser
-- Open source - all code is readable
-
-## Getting YouTube API Key
-
-1. Go to Google Cloud Console (console.cloud.google.com)
-2. Create a new project or select existing
-3. Enable "YouTube Data API v3"
-4. Go to Credentials and create API Key
-5. Restrict key to HTTP referrers (optional but recommended)
-6. Daily quota: 10,000 units = approximately 100 searches
+- Runs as three containers with `mem_limit 256m`, `cpus 0.5`, read-only root
+  filesystems and log rotation, behind an existing Caddy instance.
+- The frontend is served by `us-api` itself, so adding the site requires only
+  a Caddy block and a config reload — no extra container, no volume changes.
+- SQLite runs in WAL mode; the three containers share one `./data` directory.
 
 ## License
 
-See LICENSE file for details.
-
-## Credits
-
-Built as an open-source alternative to Astronaut.io and PetitTube.
-Inspired by the desire to explore the "raw internet" before algorithms.
+See `LICENSE`.

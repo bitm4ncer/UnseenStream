@@ -5,6 +5,36 @@ All notable changes to UnseenStream will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-11-10
+
+### Changed
+- **New architecture**: the hourly GitHub Actions scrape and the Render.com
+  free tier are replaced by a self-hosted Docker stack on a VPS.
+- **Watchlist instead of a frozen pool**: the YouTube Data API is used only
+  to discover new channels; their public RSS feeds keep the pool fresh for
+  free, so a quota outage no longer empties the site.
+- **Adaptive polling**: channels are sorted into hot/warm/cold tiers by
+  hit rate; channels that never deliver are demoted and eventually removed.
+- **Frontend moved to `web/`** and served same-origin behind Caddy: no CORS,
+  no cold-start countdown, no configurable API URL.
+- **Storage**: one SQLite file instead of an 18.9 MB JSON rewritten hourly
+  and committed to git.
+
+### Added
+- `app/` package with `discoverer`, `poller`, `api`, `seed` and a shared
+  `db`/`config` layer.
+- Quota accounting per Pacific day (`quota` table), default budget 9,700 of
+  10,000 units.
+- `Dockerfile`, `docker-compose.yml` with memory/CPU limits, read-only
+  root filesystems and log rotation.
+- Test suite (35 tests): RSS parsing, tier transitions, quota days,
+  weighted selection, 503 handling.
+
+### Removed
+- `api/api_server.py`, `scripts/video_discovery.py`, `render.yaml` and the
+  `scrape-videos` workflow.
+- Per-second background rotation and its log volume.
+
 ## [0.1.0] - 2025-11-09
 
 ### Added
