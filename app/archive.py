@@ -140,16 +140,29 @@ def fetch_metadata(identifier: str) -> dict | None:
     path = "/".join(
         requests.utils.quote(part) for part in main.get("name", "").split("/")
     )
-    media_url = DOWNLOAD_URL.format(identifier=identifier, path=path)
+    canonical = DOWNLOAD_URL.format(identifier=identifier, path=path)
 
-    if not probe_media(media_url):
-        logger.debug("Archive-Datei nicht abrufbar: %s", media_url)
+    # Direkte Node-URL spart den 302 von archive.org (rund eine halbe
+    # Sekunde vor dem ersten Byte). Faellt der Node weg, bleibt /download.
+    server = payload.get("server")
+    node_dir = payload.get("dir")
+    direct = f"https://{server}{node_dir}/{path}" if server and node_dir else None
+
+    media_url = None
+    for candidate in (direct, canonical):
+        if candidate and probe_media(candidate):
+            media_url = candidate
+            break
+
+    if not media_url:
+        logger.debug("Archive-Datei nicht abrufbar: %s", canonical)
         return None
 
     return {
         "duration_s": duration,
         "size": int(main.get("size") or 0),
         "media_url": media_url,
+        "download_url": canonical,
     }
 
 

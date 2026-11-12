@@ -89,6 +89,7 @@ function mapApiVideo(video) {
     id: { videoId: video.id },
     provider: video.provider || 'youtube',
     mediaUrl: video.mediaUrl || null,
+    downloadUrl: video.downloadUrl || null,
     channelId: video.channelId || null,
     snippet: {
       title: video.title,
@@ -526,6 +527,24 @@ async function refreshCurrentViews() {
 
 setInterval(refreshCurrentViews, 60000);
 
+function preconnect(url) {
+  if (!url) return;
+
+  try {
+    const origin = new URL(url, window.location.href).origin;
+    const selector = `link[rel="preconnect"][href="${origin}"]`;
+    if (document.querySelector(selector)) return;
+
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = origin;
+    link.crossOrigin = '';
+    document.head.appendChild(link);
+  } catch (error) {
+    /* Preconnect ist nur eine Beschleunigung */
+  }
+}
+
 function loadVideo(video, direction = 'next') {
   if (!video) return;
 
@@ -572,6 +591,12 @@ function loadVideo(video, direction = 'next') {
       }
       document.body.classList.add('archive-mode');
       if (nativePlayer) {
+        preconnect(video.mediaUrl);
+        nativePlayer.poster =
+          (video.snippet && video.snippet.thumbnails &&
+            video.snippet.thumbnails.medium &&
+            video.snippet.thumbnails.medium.url) || '';
+        nativePlayer.dataset.fallback = '';
         nativePlayer.src = video.mediaUrl;
         nativePlayer.play().catch(() => {});
       }
@@ -1401,6 +1426,18 @@ if (nativePlayerEl) {
   nativePlayerEl.addEventListener('error', () => {
     if (!nativePlayerEl.currentSrc) return;
 
+    // Direkter Node-Link kann veralten: einmal auf /download zurueckfallen.
+    const fallback = (currentVideo && currentVideo.downloadUrl) || '';
+    const usedFallback = nativePlayerEl.dataset.fallback === '1';
+
+    if (fallback && !usedFallback && !nativePlayerEl.currentSrc.includes('/download/')) {
+      nativePlayerEl.dataset.fallback = '1';
+      nativePlayerEl.src = fallback;
+      nativePlayerEl.play().catch(() => {});
+      return;
+    }
+
+    nativePlayerEl.dataset.fallback = '';
     consecutivePlaybackErrors += 1;
     if (consecutivePlaybackErrors > 3) {
       // Nicht endlos durch den Pool rattern, wenn der Server kaputte

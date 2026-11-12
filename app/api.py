@@ -13,6 +13,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
+import requests
 from flask import (
     Flask,
     Response,
@@ -29,6 +30,26 @@ from . import config, db, youtube
 logger = logging.getLogger(__name__)
 
 YTDLP = shutil.which("yt-dlp") or "yt-dlp"
+
+
+def archive_fallback(video: dict) -> str | None:
+    """Stabile /download-URL als Fallback, falls der Node nicht antwortet."""
+    media_url = video.get("media_url")
+    if video.get("provider") != "archive" or not media_url:
+        return None
+    filename = media_url.rsplit("/", 1)[-1]
+    return f"https://archive.org/download/{video['id']}/{filename}"
+
+
+def warm_media(url: str) -> None:
+    """Erste Bytes vorab anfordern, damit der Node die Datei oeffnet.
+
+    Kostet zwei Bytes und spart beim Kaltstart des Nodes oft Sekunden.
+    """
+    try:
+        requests.get(url, headers={"Range": "bytes=0-1"}, timeout=8)
+    except Exception:  # noqa: BLE001 - Aufwaermen ist optional
+        pass
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -70,6 +91,22 @@ def parse_sources(value: str | None) -> set[str] | None:
     wanted = {part.strip() for part in str(value).split(",")}
     wanted &= set(PROVIDERS)
     return wanted or None
+
+
+def verified_clause() -> tuple[str, list]:
+    """Nur Videos, deren View-Zahl kuerzlich geprueft wurde.
+
+    Ohne das steht ein Video mit 0 Views im Pool, das laengst 139 hat.
+    Archive.org ist ausgenommen: `downloads` bewegt sich kaum.
+    """
+    if config.VIEWS_CHECK_HOURS <= 0:
+        return "", []
+    cutoff = db.iso(db.utcnow() - timedelta(hours=config.VIEWS_CHECK_HOURS))
+    return (
+        " AND (provider = 'archive' OR "
+        "(views_checked_at IS NOT NULL AND views_checked_at >= ?))",
+        [cutoff],
+    )
 
 
 def age_weight(published_at: str, now) -> float:
@@ -119,6 +156,10 @@ class CandidatePool:
                 "OR media_url IS NOT NULL)"
             )
             params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
+
+            clause, extra = verified_clause()
+            query += clause
+            params.extend(extra)
 
             if config.MIN_AGE_HOURS > 0:
                 query += " AND published_at <= ?"
@@ -235,6 +276,52 @@ class CandidatePool:
 
 pool = CandidatePool()
 
+# Der Pool ist bewusst gedeckelt (Speicher), der Zaehler im Footer zaehlt
+# aber die echte Zahl in der Datenbank - mit 20 s Cache, damit das billig
+# bleibt.
+_count_cache: dict[str, tuple[float, int]] = {}
+_count_lock = threading.Lock()
+
+
+def unseen_count(source: str | None = None) -> int:
+    key = source or "all"
+    now = time.monotonic()
+
+    with _count_lock:
+        cached = _count_cache.get(key)
+        if cached and now - cached[0] < 20:
+            return cached[1]
+
+    wanted = parse_sources(source)
+    conn = db.connect()
+    query = (
+        "SELECT COUNT(*) FROM videos WHERE views <= ? AND duration_s > ? "
+        "AND served = 0 AND (provider != 'archive' OR media_url IS NOT NULL)"
+    )
+    params: list = [config.SERVE_MAX_VIEWS, config.MIN_DURATION_S]
+
+    clause, extra = verified_clause()
+    query += clause
+    params.extend(extra)
+
+    if config.MIN_AGE_HOURS > 0:
+        query += " AND published_at <= ?"
+        params.append(db.iso(db.utcnow() - timedelta(hours=config.MIN_AGE_HOURS)))
+    if config.MAX_AGE_HOURS > 0:
+        query += " AND published_at >= ?"
+        params.append(db.iso(db.utcnow() - timedelta(hours=config.MAX_AGE_HOURS)))
+
+    if wanted:
+        placeholders = ",".join("?" for _ in wanted)
+        query += f" AND provider IN ({placeholders})"
+        params.extend(sorted(wanted))
+
+    value = conn.execute(query, params).fetchone()[0]
+
+    with _count_lock:
+        _count_cache[key] = (now, value)
+    return value
+
 
 @app.get("/health")
 def health():
@@ -242,7 +329,7 @@ def health():
     channels = conn.execute(
         "SELECT COUNT(*) FROM channels WHERE alive = 1"
     ).fetchone()[0]
-    candidates = pool.size()
+    candidates = unseen_count()
 
     return jsonify(
         {
@@ -377,13 +464,9 @@ def sources():
 
 
 @app.get("/unseen-count")
-def unseen_count():
-    # Kostenlos: die Laenge des In-Memory-Pools, kein DB-Query solange der
-    # Cache frisch ist (20 s TTL). Sinkt sofort beim Ausliefern.
+def unseen_count_route():
     source = request.args.get("source")
-    response = jsonify(
-        {"count": pool.size(source)}
-    )
+    response = jsonify({"count": unseen_count(source)})
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -460,6 +543,15 @@ def current_video():
     )
     conn.commit()
 
+    if video["provider"] == "archive" and video["media_url"]:
+        threading.Thread(
+            target=warm_media, args=(video["media_url"],), daemon=True
+        ).start()
+
+    # Zaehler im Footer soll sofort sinken, nicht erst nach dem Cache.
+    with _count_lock:
+        _count_cache.clear()
+
     return jsonify(
         {
             "id": video["id"],
@@ -471,6 +563,7 @@ def current_video():
             "publishedAt": video["published_at"],
             "provider": video["provider"],
             "mediaUrl": video["media_url"],
+            "downloadUrl": archive_fallback(video),
         }
     )
 
